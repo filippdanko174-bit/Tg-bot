@@ -1,0 +1,17 @@
+# секреты
+.env
+
+# база данных
+*.db
+*.db-wal
+*.db-shm
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# редакторы
+.idea/
+.vscode/
