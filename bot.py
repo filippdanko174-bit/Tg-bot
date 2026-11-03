@@ -28,6 +28,7 @@ from feature_db import init_features
 from shop_handlers import router as shop_router
 from fun_handlers import router as fun_router
 from misc_handlers import router as misc_router
+from ai_handlers import router as ai_router
 
 log = logging.getLogger("bot")
 
@@ -55,6 +56,8 @@ async def on_error(event: ErrorEvent) -> bool:
 PUBLIC_COMMANDS = [
     BotCommand(command="start", description="Запустить бота"),
     BotCommand(command="help", description="Все команды и помощь"),
+    BotCommand(command="ai", description="Задать вопрос ИИ"),
+    BotCommand(command="aiclear", description="Очистить контекст ИИ"),
     BotCommand(command="id", description="Узнать ID пользователя и чата"),
     BotCommand(command="ping", description="Проверить связь с Telegram"),
     BotCommand(command="coin", description="Подбросить монетку"),
@@ -132,7 +135,7 @@ async def main() -> None:
         dp.errors.register(on_error)
         dp.include_routers(
             owner_router, mod_router, eco_router, work_router,
-            shop_router, common_router, fun_router, misc_router,
+            shop_router, common_router, fun_router, misc_router, ai_router,
         )
 
         try:
