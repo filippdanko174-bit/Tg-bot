@@ -152,6 +152,7 @@ async def owner_abuse_menu(cb: CallbackQuery):
     for amount in (100, 500, 1000, 5000, 10000):
         kb.button(text=f"🪙 Раздать всем по {amount:,}".replace(",", " "), callback_data=f"owner_abuse_prepare:{amount}")
     kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
+    kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
     kb.button(text="🏠 Панель", callback_data="owner_panel_home")
     kb.adjust(1)
     await cb.answer()
