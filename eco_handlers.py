@@ -33,6 +33,17 @@ def is_real_user(message: Message) -> bool:
     return u is not None and not u.is_bot and u.id != ANON_ADMIN_ID
 
 
+async def audit_owner_economy(
+    db: DB, actor_id: int, action: str, target_id: int, amount: int
+) -> None:
+    async with db.lock:
+        await db.conn.execute(
+            "INSERT INTO admin_audit(chat_id,actor_id,action,target_id,details) VALUES(0,?,?,?,?)",
+            (actor_id, action, target_id, f"Сумма: {amount} монет"),
+        )
+        await db.conn.commit()
+
+
 # ---------- баланс / топ ----------
 
 @router.message(Cmd("баланс", "бал", "balance", "bal"))
@@ -142,6 +153,7 @@ async def cmd_give(message: Message, args: list[str], db: DB) -> None:
         return
     t, amount = parsed
     new, applied = await db.change_balance(t.user_id, amount)
+    await audit_owner_economy(db, message.from_user.id, "give", t.user_id, applied)
     await message.reply(
         f"🏦 Владелец выдал {mention(t.user_id, t.name)} <b>{fmt_money(applied)}</b>.\n"
         f"Баланс: <b>{fmt_money(new)}</b>"
@@ -158,6 +170,7 @@ async def cmd_take(message: Message, args: list[str], db: DB) -> None:
         return
     t, amount = parsed
     new, applied = await db.change_balance(t.user_id, -amount)
+    await audit_owner_economy(db, message.from_user.id, "take", t.user_id, -applied)
     await message.reply(
         f"🏦 Владелец забрал у {mention(t.user_id, t.name)} <b>{fmt_money(-applied)}</b>.\n"
         f"Баланс: <b>{fmt_money(new)}</b>"
