@@ -153,7 +153,8 @@ async def open_permissions(bot: Bot, chat_id: int) -> ChatPermissions:
     try:
         chat = await bot.get_chat(chat_id)
         base = getattr(chat, "permissions", None)
-        if base is not None and base.can_send_messages:
+        if base is not None:
+            # Сохраняем именно права по умолчанию чата, даже если отправка сообщений отключена.
             return base
     except TelegramAPIError:
         pass
@@ -293,6 +294,7 @@ async def cmd_unwarn(message: Message, args: list[str], bot: Bot, db: DB) -> Non
     if t is None:
         return
     count = await db.remove_warn(message.chat.id, t.user_id)
+    await audit_admin(db, message, "unwarn", t.user_id)
     await message.reply(
         f"✅ С {mention(t.user_id, t.name)} снят варн. Сейчас: <b>{count}/{config.WARN_LIMIT}</b>."
     )
