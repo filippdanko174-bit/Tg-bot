@@ -8,7 +8,7 @@ from utils import Cmd, parse_amount, fmt_money
 
 router = Router(name="mini_games")
 
-async def play(message: Message, db: DB, amount_token: str, game: str):
+async def play(message: Message, db: DB, amount_token: str, game: str, choice: str | None = None):
     amount = parse_amount(amount_token)
     if amount is None or amount > 100000:
         await message.reply("Укажи ставку от 1 до 100 000 виртуальных монет."); return
@@ -31,11 +31,13 @@ async def play(message: Message, db: DB, amount_token: str, game: str):
         multiplier = 2 if sum(dice) >= 8 else 0
         outcome = f"🎲 {dice[0]} + {dice[1]} = {sum(dice)}"
     else:
+        if choice not in {"красное", "чёрное", "зелёное"}:
+            await message.reply("Укажи цвет: /рулетка 100 красное (или чёрное / зелёное).")
+            return
         pick = random.randint(0, 36)
-        chosen = random.choice(["красное", "чёрное", "зелёное"])
         color = "зелёное" if pick == 0 else ("красное" if pick % 2 else "чёрное")
-        multiplier = 2 if chosen == color else 0
-        outcome = f"🎡 Выпало {pick} ({color}); выбор: {chosen}"
+        multiplier = 14 if choice == "зелёное" and color == "зелёное" else (2 if choice == color else 0)
+        outcome = f"🎡 Выпало {pick} ({color}); твой выбор: {choice}"
     async with db.lock:
         await db.conn.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (user.id,))
         async with db.conn.execute("SELECT balance FROM users WHERE user_id=?", (user.id,)) as cur:
@@ -75,4 +77,5 @@ async def roulette(message: Message, args: list[str], db: DB):
     token = args_or_help(args)
     if token is None:
         await message.reply("Формат: /рулетка 100"); return
-    await play(message, db, token, "рулетка")
+    choice = args[1].lower() if len(args) > 1 else None
+    await play(message, db, token, "рулетка", choice)
