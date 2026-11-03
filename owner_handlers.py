@@ -70,6 +70,7 @@ async def admin_panel(message: Message):
     kb.button(text="👥 Пользователи", callback_data="owner_users:0")
     kb.button(text="💬 Группы", callback_data="owner_groups:0")
     kb.button(text="🧾 Журнал админов", callback_data="owner_audit:0")
+    kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
     kb.button(text="🏷 Роли", callback_data="owner_roles")
     kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
     kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
@@ -101,6 +102,7 @@ async def owner_panel_refresh(cb: CallbackQuery):
         kb = InlineKeyboardBuilder()
         kb.button(text="📊 Статистика", callback_data="owner_stats")
         kb.button(text="👥 Пользователи", callback_data="owner_users:0")
+        kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
         kb.button(text="🏷 Роли", callback_data="owner_roles")
         kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
         kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
@@ -121,6 +123,7 @@ async def owner_panel_home(cb: CallbackQuery):
     kb = InlineKeyboardBuilder()
     kb.button(text="📊 Статистика", callback_data="owner_stats")
     kb.button(text="👥 Пользователи", callback_data="owner_users:0")
+    kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
     kb.button(text="🏷 Роли", callback_data="owner_roles")
     kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
     kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
@@ -138,6 +141,116 @@ async def owner_panel_home(cb: CallbackQuery):
             "⚙️ Управление ролями, приветствиями и модерацией.",
             reply_markup=kb.as_markup()
         )
+
+
+@router.callback_query(F.data == "owner_abuse")
+async def owner_abuse_menu(cb: CallbackQuery):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Только владелец в личке с ботом", show_alert=True)
+        return
+    kb = InlineKeyboardBuilder()
+    for amount in (100, 500, 1000, 5000, 10000):
+        kb.button(text=f"🪙 Раздать всем по {amount:,}".replace(",", " "), callback_data=f"owner_abuse_prepare:{amount}")
+    kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
+    kb.button(text="🏠 Панель", callback_data="owner_panel_home")
+    kb.adjust(1)
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text(
+            "🔥 <b>АДМИН-АБЬЮЗ · РАЗДАЧИ</b>\\n\\n"
+            "Выбери массовую раздачу монет всем пользователям, которые есть в базе бота. "
+            "Перед начислением будет отдельное подтверждение.\\n"
+            "Раздача не отправляет личные сообщения участникам.",
+            reply_markup=kb.as_markup()
+        )
+
+
+@router.callback_query(F.data.startswith("owner_abuse_prepare:"))
+async def owner_abuse_prepare(cb: CallbackQuery):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        amount = int(cb.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await cb.answer("Некорректная сумма", show_alert=True)
+        return
+    if amount not in (100, 500, 1000, 5000, 10000):
+        await cb.answer("Недопустимая сумма", show_alert=True)
+        return
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Подтвердить раздачу", callback_data=f"owner_abuse_confirm:{amount}")
+    kb.button(text="⬅️ Назад", callback_data="owner_abuse")
+    kb.adjust(1)
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text(
+            f"⚠️ <b>Подтверждение раздачи</b>\\n\\n"
+            f"Каждому пользователю из базы будет начислено <b>{amount:,}</b> монет.\\n"
+            "Операция необратима. Продолжить?".replace(",", " "),
+            reply_markup=kb.as_markup()
+        )
+
+
+@router.callback_query(F.data.startswith("owner_abuse_confirm:"))
+async def owner_abuse_confirm(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        amount = int(cb.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await cb.answer("Некорректная сумма", show_alert=True)
+        return
+    if amount not in (100, 500, 1000, 5000, 10000):
+        await cb.answer("Недопустимая сумма", show_alert=True)
+        return
+    async with db.lock:
+        async with db.conn.execute("SELECT COUNT(*) AS n FROM users") as cur:
+            count = (await cur.fetchone())["n"]
+        async with db.conn.execute(
+            "SELECT COALESCE(SUM(MIN(?, MAX(0, 1000000000000000-balance))), 0) AS total FROM users",
+            (amount,)
+        ) as cur:
+            credited = (await cur.fetchone())["total"]
+        await db.conn.execute(
+            "UPDATE users SET balance=MIN(balance+?, 1000000000000000)", (amount,)
+        )
+        await db.conn.execute(
+            "INSERT INTO admin_audit(chat_id,actor_id,action,target_id,details) VALUES(0,?,'give_all',NULL,?)",
+            (cb.from_user.id, f"Раздача по {amount} монет; пользователей: {count}; начислено: {credited}")
+        )
+        await db.conn.commit()
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔥 Ещё раздать", callback_data="owner_abuse")
+    kb.button(text="🏠 Панель", callback_data="owner_panel_home")
+    kb.adjust(1)
+    await cb.answer("Раздача выполнена")
+    if cb.message:
+        await cb.message.edit_text(
+            "🎉 <b>РАЗДАЧА ЗАВЕРШЕНА!</b>\\n"
+            f"👥 Получателей в базе: <b>{count}</b>\\n"
+            f"🪙 Начислено всего: <b>{credited:,}</b> монет".replace(",", " "),
+            reply_markup=kb.as_markup()
+        )
+
+
+@router.callback_query(F.data.startswith("owner_abuse_self:"))
+async def owner_abuse_self(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    amount = 10000
+    new_balance, applied = await db.change_balance(cb.from_user.id, amount)
+    async with db.lock:
+        await db.conn.execute(
+            "INSERT INTO admin_audit(chat_id,actor_id,action,target_id,details) VALUES(0,?,'give_self',?,?)",
+            (cb.from_user.id, cb.from_user.id, f"Бонус владельцу: {applied}")
+        )
+        await db.conn.commit()
+    await cb.answer("Бонус начислен")
+    if cb.message:
+        await cb.message.answer(f"👑 Тебе начислено <b>{applied:,}</b> монет. Баланс: <b>{new_balance:,}</b>.".replace(",", " "))
 
 
 @router.callback_query(F.data.startswith("owner_groups:"))
