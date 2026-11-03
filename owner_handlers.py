@@ -271,7 +271,11 @@ async def owner_groups(cb: CallbackQuery, db: DB):
     if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True)
         return
-    page = max(0, int(cb.data.split(":")[-1]))
+    try:
+        page = max(0, int((cb.data or "").split(":")[-1]))
+    except (ValueError, IndexError):
+        await cb.answer("Некорректная страница", show_alert=True)
+        return
     per_page = 8
     async with db.conn.execute("SELECT COUNT(*) AS n FROM known_chats") as cur:
         total = (await cur.fetchone())["n"]
@@ -296,7 +300,11 @@ async def owner_audit(cb: CallbackQuery, db: DB):
     if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True)
         return
-    page = max(0, int(cb.data.split(":")[-1]))
+    try:
+        page = max(0, int((cb.data or "").split(":")[-1]))
+    except (ValueError, IndexError):
+        await cb.answer("Некорректная страница", show_alert=True)
+        return
     per_page = 10
     async with db.conn.execute("SELECT COUNT(*) AS n FROM admin_audit") as cur:
         total = (await cur.fetchone())["n"]
@@ -306,7 +314,7 @@ async def owner_audit(cb: CallbackQuery, db: DB):
         rows=await cur.fetchall()
     lines=[f"🧾 <b>ЖУРНАЛ ДЕЙСТВИЙ АДМИНОВ</b> · {total}",f"Страница {page+1}/{pages}",""]
     for row in rows:
-        lines.append(f"• <b>{escape(row['action'])}</b> · админ <code>{row['actor_id']}</code>\nЧат <code>{row['chat_id']}</code> · цель <code>{row['target_id'] or '—'}</code>\n{escape(row['details'] or '')}")
+        lines.append(f"• <b>{escape(row['action'])}</b> · админ <code>{row['actor_id']}</code>\nЧат <code>{row['chat_id']}</code> · цель <code>{row['target_id'] or '—'}</code>\n{escape((row['details'] or '')[:180])}")
     kb=InlineKeyboardBuilder()
     if page: kb.button(text="⬅️",callback_data=f"owner_audit:{page-1}")
     if page+1<pages: kb.button(text="➡️",callback_data=f"owner_audit:{page+1}")
