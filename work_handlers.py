@@ -203,9 +203,15 @@ async def cmd_profile(message: Message, args: list[str], db: DB) -> None:
         name = f"{title_icon} {name}"
     job = JOBS_BY_ID.get(row["job_id"]) if row["job_id"] else None
     total = row["total_shifts"]
+    role_line = ""
+    if row["role"]:
+        async with db.conn.execute("SELECT priority FROM custom_roles WHERE name=? COLLATE NOCASE", (row["role"],)) as cur:
+            role_row = await cur.fetchone()
+        priority_text = f" · приоритет {role_row['priority']}/100" if role_row else ""
+        role_line = f"🏷 Роль: <b>{escape(row['role'])}</b>{priority_text}"
     lines = [
         f"👤 <b>{escape(name)}</b>",
-        f"🏷 Роль: <b>{escape(row['role'])}</b>" if row["role"] else "",
+        role_line,
         f"💰 Баланс: <b>{fmt_money(row['balance'])}</b>",
         f"📈 Заработано за всё время: {fmt_money(row['total_earned'])}",
     ]
