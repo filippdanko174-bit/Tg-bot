@@ -196,3 +196,65 @@ async def set_welcome(message: Message, args: list[str], db: DB):
             (message.chat.id, value[:1000]))
         await db.conn.commit()
     await message.reply("✅ Приветствие отключено." if not value else "✅ Приветствие сохранено.")
+
+
+# ---------- приветствие новичков и добровольные упоминания ----------
+import time
+from aiogram.enums import ChatType
+from aiogram.types import User
+
+_last_call: dict[int, float] = {}
+
+@router.message(F.new_chat_members)
+async def welcome_new_members(message: Message, db: DB):
+    template = await db.get_welcome(message.chat.id) if hasattr(db, "get_welcome") else ""
+    if not template:
+        async with db.conn.execute("SELECT welcome_text FROM chat_settings WHERE chat_id=?", (message.chat.id,)) as cur:
+            row = await cur.fetchone()
+        template = row["welcome_text"] if row else ""
+    if not template:
+        return
+    for user in message.new_chat_members:
+        if user.is_bot:
+            continue
+        safe_name = escape(user.full_name)
+        text = template.replace("{name}", safe_name).replace("{username}", escape("@" + user.username if user.username else "нет")).replace("{id}", str(user.id))
+        await message.answer(text[:4000])
+
+@router.message(Cmd("зов_вкл", "zov_on"))
+async def optin_zov(message: Message, db: DB):
+    if message.chat.type not in {"group", "supergroup"} or message.from_user is None:
+        await message.reply("Команда работает в группе."); return
+    async with db.lock:
+        await db.conn.execute("INSERT OR IGNORE INTO mention_optins(chat_id,user_id) VALUES(?,?)", (message.chat.id, message.from_user.id))
+        await db.conn.commit()
+    await message.reply("✅ Ты согласился получать упоминания по команде /зов. Отписаться: /зов_выкл")
+
+@router.message(Cmd("зов_выкл", "zov_off"))
+async def optout_zov(message: Message, db: DB):
+    if message.chat.type not in {"group", "supergroup"} or message.from_user is None:
+        await message.reply("Команда работает в группе."); return
+    async with db.lock:
+        await db.conn.execute("DELETE FROM mention_optins WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id))
+        await db.conn.commit()
+    await message.reply("Отключено: ты больше не получаешь упоминания от /зов.")
+
+@router.message(Cmd("зов", "zov"))
+async def call_opted_in(message: Message, db: DB):
+    if message.chat.type not in {"group", "supergroup"}:
+        await message.reply("Команда работает в группе."); return
+    now = time.monotonic()
+    if now - _last_call.get(message.chat.id, 0) < 60:
+        await message.reply("⏳ Команду /зов можно использовать раз в минуту.")
+        return
+    async with db.conn.execute(
+        "SELECT u.user_id,COALESCE(NULLIF(u.custom_nick,''),NULLIF(u.first_name,''),u.username,CAST(u.user_id AS TEXT)) AS display "
+        "FROM mention_optins m LEFT JOIN users u ON u.user_id=m.user_id WHERE m.chat_id=? ORDER BY m.user_id LIMIT 20",
+        (message.chat.id,)) as cur:
+        rows = await cur.fetchall()
+    if not rows:
+        await message.reply("Пока никто не подписался. Участники могут написать /зов_вкл.")
+        return
+    _last_call[message.chat.id] = now
+    mentions = [f'<a href="tg://user?id={row["user_id"]}">{escape(row["display"])}</a>' for row in rows]
+    await message.answer("📢 Участники, подписавшиеся на упоминания:\n" + " · ".join(mentions))
