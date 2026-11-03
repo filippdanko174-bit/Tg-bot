@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
@@ -26,8 +27,14 @@ OWNER_IDS: set[int] = {
     int(x) for x in os.getenv("OWNER_ID", "").replace(" ", "").split(",") if x.isdigit()
 }
 
-# Путь к файлу базы данных
-DB_PATH: str = os.getenv("DB_PATH", "bot.db")
+# База по умолчанию лежит рядом с файлами проекта, а не зависит от
+# текущей рабочей папки процесса. На хостинге укажи DB_PATH на постоянный диск.
+BASE_DIR = Path(__file__).resolve().parent
+_db_path = Path(os.getenv("DB_PATH", str(BASE_DIR / "bot.db"))).expanduser()
+if not _db_path.is_absolute():
+    _db_path = BASE_DIR / _db_path
+_db_path.parent.mkdir(parents=True, exist_ok=True)
+DB_PATH: str = str(_db_path)
 
 # Модерация
 WARN_LIMIT: int = max(1, _int("WARN_LIMIT", 3))  # сколько варнов до авто-мута
