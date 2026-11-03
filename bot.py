@@ -55,6 +55,8 @@ PUBLIC_COMMANDS = [
     BotCommand(command="balance", description="Баланс монет"),
     BotCommand(command="pay", description="Передать монеты"),
     BotCommand(command="top", description="Самые богатые"),
+    BotCommand(command="shop", description="Магазин за монеты"),
+    BotCommand(command="inventory", description="Моя коллекция"),
     BotCommand(command="quit", description="Уволиться"),
     BotCommand(command="warns", description="Сколько варнов"),
     BotCommand(command="help", description="Все команды"),
