@@ -110,6 +110,34 @@ async def owner_panel_refresh(cb: CallbackQuery):
 
 
 
+
+@router.callback_query(F.data == "owner_panel_home")
+async def owner_panel_home(cb: CallbackQuery):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📊 Статистика", callback_data="owner_stats")
+    kb.button(text="👥 Пользователи", callback_data="owner_users:0")
+    kb.button(text="🏷 Роли", callback_data="owner_roles")
+    kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
+    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
+    kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
+    kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
+    kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
+    kb.adjust(2, 2, 2, 2)
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text(
+            "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\\n"
+            "━━━━━━━━━━━━━━━━━━\\n"
+            "Выбери раздел ниже. Кнопки доступны только владельцу.\\n\\n"
+            "👥 Список пользователей и просмотр профилей.\\n"
+            "⚙️ Управление ролями, приветствиями и модерацией.",
+            reply_markup=kb.as_markup()
+        )
+
+
 @router.callback_query(F.data.startswith("owner_users:"))
 async def owner_users(cb: CallbackQuery, db: DB):
     if not callback_is_owner_private(cb):
@@ -144,7 +172,7 @@ async def owner_users(cb: CallbackQuery, db: DB):
     if page + 1 < pages:
         nav.button(text="Вперёд ➡️", callback_data=f"owner_users:{page + 1}")
     nav.button(text="🔄 Обновить", callback_data=f"owner_users:{page}")
-    nav.button(text="🏠 В панель", callback_data="owner_panel_refresh")
+    nav.button(text="🏠 В панель", callback_data="owner_panel_home")
     nav.adjust(2, 2)
     kb_buttons = kb.as_markup().inline_keyboard + nav.as_markup().inline_keyboard
     await cb.answer()
