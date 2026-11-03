@@ -24,6 +24,7 @@ from mod_handlers import router as mod_router
 from work_handlers import router as work_router
 from owner_handlers import router as owner_router
 from feature_db import init_features
+from shop_handlers import router as shop_router
 
 log = logging.getLogger("bot")
 
@@ -90,7 +91,7 @@ async def main() -> None:
     dp = Dispatcher(db=db)
     dp.message.outer_middleware(TrackUsers())
     dp.errors.register(on_error)
-    dp.include_routers(owner_router, mod_router, eco_router, work_router, common_router)
+    dp.include_routers(owner_router, mod_router, eco_router, work_router, shop_router, common_router)
 
     try:
         await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
