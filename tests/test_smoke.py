@@ -33,6 +33,51 @@ class DatabaseSmokeTests(unittest.IsolatedAsyncioTestCase):
         await self.db.close()
         self.temp_dir.cleanup()
 
+    async def test_chat_directory_and_mass_grants(self) -> None:
+        await self.db.upsert_user(20001, "near_cap", "Near Cap")
+        await self.db.upsert_user(20002, "regular", "Regular")
+        await self.db.change_balance(20001, 10**15 - 50)
+
+        count, credited = await self.db.grant_all(100)
+        self.assertEqual((count, credited), (2, 150))
+
+        first = await self.db.get_user(20001)
+        second = await self.db.get_user(20002)
+        self.assertEqual(first["balance"], 10**15)
+        self.assertEqual(second["balance"], 100)
+
+        await self.db.save_chat(-1001234567890, "Test Group", "supergroup", "test_group")
+        async with self.db.conn.execute(
+            "SELECT title,chat_type,username FROM known_chats WHERE chat_id=?",
+            (-1001234567890,),
+        ) as cur:
+            chat = await cur.fetchone()
+        self.assertEqual(tuple(chat), ("Test Group", "supergroup", "test_group"))
+
+        await self.db.forget_chat(-1001234567890)
+        async with self.db.conn.execute(
+            "SELECT 1 FROM known_chats WHERE chat_id=?", (-1001234567890,)
+        ) as cur:
+            self.assertIsNone(await cur.fetchone())
+
+    async def test_transfer_rejects_recipient_overflow(self) -> None:
+        await self.db.upsert_user(30001, "sender", "Sender")
+        await self.db.upsert_user(30002, "recipient", "Recipient")
+        await self.db.change_balance(30001, 100)
+        await self.db.change_balance(30002, 10**15 - 50)
+
+        self.assertFalse(await self.db.transfer(30001, 30002, 100))
+        sender = await self.db.get_user(30001)
+        recipient = await self.db.get_user(30002)
+        self.assertEqual(sender["balance"], 100)
+        self.assertEqual(recipient["balance"], 10**15 - 50)
+
+        self.assertTrue(await self.db.transfer(30001, 30002, 50))
+        sender = await self.db.get_user(30001)
+        recipient = await self.db.get_user(30002)
+        self.assertEqual(sender["balance"], 50)
+        self.assertEqual(recipient["balance"], 10**15)
+
     async def test_migrations_and_economy(self) -> None:
         # Migrations must be safe to run more than once.
         await init_features(self.db)
