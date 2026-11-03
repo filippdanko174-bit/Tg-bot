@@ -1,4 +1,4 @@
-"""Owner tools: interactive per-user editor and welcome settings."""
+"""Owner tools: global bot administration."""
 from __future__ import annotations
 
 from html import escape
@@ -18,8 +18,6 @@ _pending_abuse: dict[str, tuple[int, int, float]] = {}
 
 FIELDS = {
     "balance": ("Баланс", "целое число от 0 до 10^15"),
-    "custom_nick": ("Ник", "текст до 64 символов; точка . — очистить"),
-    "role": ("Роль", "текст до 64 символов; точка . — очистить"),
     "job_id": ("ID работы", "ID из jobs.py; точка . — без работы"),
     "total_shifts": ("Смены", "целое число от 0 до 10^9"),
     "total_earned": ("Всего заработано", "целое число от 0 до 10^15"),
@@ -50,7 +48,7 @@ PANEL_TEXT = (
     "━━━━━━━━━━━━━━━━━━\n"
     "Выбери раздел ниже. Кнопки доступны только владельцу.\n\n"
     "👤 Редактор профилей и подробные данные открываются в личке с ботом.\n"
-    "⚙️ Здесь находятся группы, журнал действий, роли, модерация и раздачи."
+    "⚙️ Здесь находятся группы, журнал действий, модерация и глобальные функции."
 )
 
 
@@ -61,9 +59,7 @@ def panel_keyboard() -> InlineKeyboardMarkup:
     kb.button(text="💬 Группы", callback_data="owner_groups:0")
     kb.button(text="🧾 Журнал админов", callback_data="owner_audit:0")
     kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
-    kb.button(text="🏷 Роли", callback_data="owner_roles")
     kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
-    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
     kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
     kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
     kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
@@ -80,8 +76,6 @@ async def render_user(db: DB, uid: int) -> str:
         f"ID: <code>{uid}</code>\n"
         f"Имя: {escape(row['first_name'] or '—')}\n"
         f"Username: @{escape(row['username'] or '—')}\n"
-        f"Ник: {escape(row['custom_nick'] or '—')}\n"
-        f"Роль: {escape(row['role'] or '—')}\n"
         f"Баланс: <b>{fmt_money(row['balance'])}</b>\n"
         f"Работа: <code>{escape(row['job_id'] or 'нет')}</code>\n"
         f"Смены: {row['total_shifts']}\n"
@@ -339,7 +333,7 @@ async def owner_users(cb: CallbackQuery, db: DB):
     pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, pages - 1)
     async with db.conn.execute(
-        "SELECT user_id, username, first_name, balance, role FROM users "
+        "SELECT user_id, username, first_name, balance FROM users "
         "ORDER BY user_id DESC LIMIT ? OFFSET ?", (per_page, page * per_page)
     ) as cur:
         rows = await cur.fetchall()
@@ -347,8 +341,7 @@ async def owner_users(cb: CallbackQuery, db: DB):
     kb = InlineKeyboardBuilder()
     for row in rows:
         name = row["first_name"] or (f"@{row['username']}" if row["username"] else str(row["user_id"]))
-        role = f" · {row['role']}" if row["role"] else ""
-        lines.append(f"• {escape(name)} · <code>{row['user_id']}</code>{escape(role)}")
+        lines.append(f"• {escape(name)} · <code>{row['user_id']}</code>")
         kb.button(text=f"👤 {name[:24]}", callback_data=f"owner_user_view:{row['user_id']}")
     kb.adjust(1)
     nav = InlineKeyboardBuilder()
@@ -582,7 +575,7 @@ async def reset_user(cb: CallbackQuery, db: DB):
         return
     async with db.lock:
         await db.conn.execute(
-            "UPDATE users SET balance=0,job_id=NULL,total_shifts=0,total_earned=0,last_work=0,custom_nick='',role='',active_title='' WHERE user_id=?",
+            "UPDATE users SET balance=0,job_id=NULL,total_shifts=0,total_earned=0,last_work=0,active_title='' WHERE user_id=?",
             (uid,)
         )
         await db.conn.execute("DELETE FROM job_stats WHERE user_id=?", (uid,))
