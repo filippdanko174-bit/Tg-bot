@@ -179,6 +179,11 @@ async def pending_value(message: Message, db: DB):
             await db.conn.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (number, uid))
             await db.conn.commit()
     else:
+        if field == "role" and value != ".":
+            async with db.conn.execute("SELECT 1 FROM custom_roles WHERE name=? COLLATE NOCASE", (value,)) as cur:
+                if await cur.fetchone() is None:
+                    await message.reply("Такой роли нет. Сначала создай её командой /создатьроль Название 50 или выбери /роли.")
+                    return
         if field == "job_id" and value != ".":
             from jobs import JOBS_BY_ID
             if value not in JOBS_BY_ID:
@@ -192,7 +197,132 @@ async def pending_value(message: Message, db: DB):
     _pending.pop(message.from_user.id, None)
     await message.answer("✅ Изменение сохранено.\n\n" + await render_user(db, uid), reply_markup=user_keyboard(uid))
 
-@router.message(Cmd("приветствие", "welcome"))
+
+
+# ---------- управление пользовательскими ролями (только владелец в ЛС) ----------
+
+@router.message(Cmd("роли", "roles"))
+async def list_roles(message: Message, db: DB):
+    if not owner_private(message):
+        return
+    async with db.conn.execute("SELECT name,priority FROM custom_roles ORDER BY priority DESC,name COLLATE NOCASE") as cur:
+        rows = await cur.fetchall()
+    if not rows:
+        await message.answer("Пока ролей нет. Создай: <code>/создатьроль Название 50</code>")
+        return
+    lines = ["🏷 <b>Роли сервера</b> (приоритет 0–100):"]
+    lines.extend(f"• <b>{escape(row['name'])}</b> — приоритет <b>{row['priority']}</b>" for row in rows)
+    lines.append("\\nИзменить: /приоритетроль Название 75\\nУдалить: /удалитьроль Название")
+    await message.answer("\\n".join(lines))
+
+
+@router.message(Cmd("создатьроль", "rolecreate"))
+async def create_role(message: Message, args: list[str], db: DB):
+    if not owner_private(message):
+        return
+    if len(args) < 2:
+        await message.reply("Формат: <code>/создатьроль Название 50</code>")
+        return
+    try:
+        priority = int(args[-1])
+    except ValueError:
+        await message.reply("Последним аргументом укажи приоритет от 0 до 100.")
+        return
+    name = " ".join(args[:-1]).strip()
+    if not name or len(name) > 32 or not 0 <= priority <= 100:
+        await message.reply("Название — до 32 символов, приоритет — от 0 до 100.")
+        return
+    try:
+        async with db.lock:
+            await db.conn.execute("INSERT INTO custom_roles(name,priority) VALUES(?,?)", (name, priority))
+            await db.conn.commit()
+    except Exception:
+        await message.reply("Такая роль уже существует.")
+        return
+    await message.answer(f"✅ Роль <b>{escape(name)}</b> создана. Приоритет: <b>{priority}</b>.")
+
+
+@router.message(Cmd("удалитьроль", "roledelete"))
+async def delete_role(message: Message, args: list[str], db: DB):
+    if not owner_private(message):
+        return
+    name = " ".join(args).strip()
+    if not name:
+        await message.reply("Формат: <code>/удалитьроль Название</code>")
+        return
+    async with db.lock:
+        async with db.conn.execute("SELECT name FROM custom_roles WHERE name=? COLLATE NOCASE", (name,)) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            await message.reply("Роль не найдена. Посмотри список: /роли")
+            return
+        await db.conn.execute("UPDATE users SET role='' WHERE role=? COLLATE NOCASE", (row["name"],))
+        await db.conn.execute("DELETE FROM custom_roles WHERE name=? COLLATE NOCASE", (row["name"],))
+        await db.conn.commit()
+    await message.answer(f"🗑 Роль <b>{escape(row['name'])}</b> удалена. У назначенных пользователей роль снята.")
+
+
+@router.message(Cmd("приоритетроль", "rolepriority"))
+async def set_role_priority(message: Message, args: list[str], db: DB):
+    if not owner_private(message):
+        return
+    if len(args) < 2:
+        await message.reply("Формат: <code>/приоритетроль Название 75</code>")
+        return
+    try:
+        priority = int(args[-1])
+    except ValueError:
+        await message.reply("Приоритет должен быть числом от 0 до 100.")
+        return
+    name = " ".join(args[:-1]).strip()
+    if not 0 <= priority <= 100:
+        await message.reply("Приоритет должен быть от 0 до 100.")
+        return
+    async with db.lock:
+        cur = await db.conn.execute("UPDATE custom_roles SET priority=? WHERE name=? COLLATE NOCASE", (priority, name))
+        await db.conn.commit()
+        changed = cur.rowcount
+    if not changed:
+        await message.reply("Роль не найдена. Посмотри список: /роли")
+        return
+    await message.answer(f"✅ Приоритет роли <b>{escape(name)}</b> установлен: <b>{priority}</b>.")
+
+
+@router.message(Cmd("назначитьроль", "roleset"))
+async def assign_role(message: Message, args: list[str], db: DB):
+    if not owner_private(message):
+        return
+    target = await resolve_target(message, args, db)
+    if target is None or not target.rest:
+        await message.reply("Формат: ответь на сообщение <code>/назначитьроль Название</code> или напиши <code>/назначитьроль @ник Название</code>.")
+        return
+    role_name = " ".join(target.rest).strip()
+    async with db.conn.execute("SELECT name FROM custom_roles WHERE name=? COLLATE NOCASE", (role_name,)) as cur:
+        role = await cur.fetchone()
+    if role is None:
+        await message.reply("Роль не найдена. Посмотри /роли или создай её.")
+        return
+    await db.ensure_user(target.user_id)
+    async with db.lock:
+        await db.conn.execute("UPDATE users SET role=? WHERE user_id=?", (role["name"], target.user_id))
+        await db.conn.commit()
+    await message.answer(f"✅ Пользователю {mention(target.user_id, target.name)} назначена роль <b>{escape(role['name'])}</b>.")
+
+
+@router.message(Cmd("снятьроль", "roleremove"))
+async def remove_role(message: Message, args: list[str], db: DB):
+    if not owner_private(message):
+        return
+    target = await resolve_target(message, args, db)
+    if target is None:
+        await message.reply("Ответь на сообщение или укажи ID/@ник: /снятьроль @ник")
+        return
+    await db.ensure_user(target.user_id)
+    async with db.lock:
+        await db.conn.execute("UPDATE users SET role='' WHERE user_id=?", (target.user_id,))
+        await db.conn.commit()
+    await message.answer(f"✅ Роль снята с {mention(target.user_id, target.name)}.")
+\n@router.message(Cmd("приветствие", "welcome"))
 async def set_welcome(message: Message, args: list[str], db: DB):
     if not owner_private(message):
         if message.chat.type != "private":
