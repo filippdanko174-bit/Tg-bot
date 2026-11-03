@@ -10,6 +10,10 @@ async def init_features(db):
         if "active_title" not in columns:
             await db.conn.execute("ALTER TABLE users ADD COLUMN active_title TEXT NOT NULL DEFAULT ''")
         await db.conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_roles (
+            name TEXT PRIMARY KEY COLLATE NOCASE,
+            priority INTEGER NOT NULL CHECK(priority BETWEEN 0 AND 100)
+        );
         CREATE TABLE IF NOT EXISTS shop_inventory (
             user_id INTEGER NOT NULL,
             item_id TEXT NOT NULL,
