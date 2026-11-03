@@ -60,7 +60,7 @@ async def render_user(db: DB, uid: int) -> str:
         f"Заработано: {fmt_money(row['total_earned'])}"
     )
 
-@router.message(Cmd("сетстат", "setstat"))
+@router.message(Cmd("админпанель", "adminpanel"))
 async def admin_panel(message: Message):
     if not owner_ok(message.from_user):
         await message.reply("⛔ Панель доступна только владельцу бота.")
@@ -322,7 +322,7 @@ async def owner_fun_help(cb: CallbackQuery):
             "/зов — список тех, кто сам подписался"
         )
 
-@router.message(Cmd("юзер", "useredit"))
+@router.message(Cmd("юзер", "useredit", "сетстат", "setstat"))
 async def edit_user(message: Message, args: list[str], db: DB):
     if not owner_private(message):
         return
