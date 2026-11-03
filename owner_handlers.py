@@ -203,7 +203,7 @@ async def pending_value(message: Message, db: DB):
 
 @router.message(Cmd("роли", "roles"))
 async def list_roles(message: Message, db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     async with db.conn.execute("SELECT name,priority FROM custom_roles ORDER BY priority DESC,name COLLATE NOCASE") as cur:
         rows = await cur.fetchall()
@@ -218,7 +218,7 @@ async def list_roles(message: Message, db: DB):
 
 @router.message(Cmd("создатьроль", "rolecreate"))
 async def create_role(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     if len(args) < 2:
         await message.reply("Формат: <code>/создатьроль Название 50</code>")
@@ -244,7 +244,7 @@ async def create_role(message: Message, args: list[str], db: DB):
 
 @router.message(Cmd("удалитьроль", "roledelete"))
 async def delete_role(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     name = " ".join(args).strip()
     if not name:
@@ -264,7 +264,7 @@ async def delete_role(message: Message, args: list[str], db: DB):
 
 @router.message(Cmd("приоритетроль", "rolepriority"))
 async def set_role_priority(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     if len(args) < 2:
         await message.reply("Формат: <code>/приоритетроль Название 75</code>")
@@ -290,7 +290,7 @@ async def set_role_priority(message: Message, args: list[str], db: DB):
 
 @router.message(Cmd("назначитьроль", "roleset"))
 async def assign_role(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     target = await resolve_target(message, args, db)
     if target is None or not target.rest:
@@ -311,7 +311,7 @@ async def assign_role(message: Message, args: list[str], db: DB):
 
 @router.message(Cmd("снятьроль", "roleremove"))
 async def remove_role(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
         return
     target = await resolve_target(message, args, db)
     if target is None:
@@ -325,29 +325,41 @@ async def remove_role(message: Message, args: list[str], db: DB):
 
 @router.message(Cmd("приветствие", "welcome"))
 async def set_welcome(message: Message, args: list[str], db: DB):
-    if not owner_private(message):
-        if message.chat.type != "private":
-            await message.reply("⛔ Настраивать приветствие можно только в ЛС бота.")
+    if not owner_ok(message.from_user):
+        await message.reply("⛔ Настраивать приветствие может только владелец бота.")
         return
-    if len(args) < 2:
-        await message.reply(
-            "Формат в ЛС бота: <code>/welcome ID_ГРУППЫ Привет, {name}!</code>\n"
-            "Отключить: <code>/welcome ID_ГРУППЫ off</code>."
-        )
-        return
-    try:
-        chat_id = int(args[0])
-    except ValueError:
-        await message.reply("Первым аргументом укажи числовой ID группы, например -1001234567890.")
-        return
-    value = " ".join(args[1:])
+
+    if message.chat.type in {"group", "supergroup"}:
+        chat_id = message.chat.id
+        if not args:
+            await message.reply(
+                "Формат в группе: <code>/welcome Привет, {name}!</code>\n"
+                "Отключить: <code>/welcome off</code>."
+            )
+            return
+        value = " ".join(args)
+    else:
+        if len(args) < 2:
+            await message.reply(
+                "Формат в ЛС: <code>/welcome ID_ГРУППЫ Привет, {name}!</code>\n"
+                "Отключить: <code>/welcome ID_ГРУППЫ off</code>."
+            )
+            return
+        try:
+            chat_id = int(args[0])
+        except ValueError:
+            await message.reply("Первым аргументом укажи числовой ID группы, например -1001234567890.")
+            return
+        value = " ".join(args[1:])
+
     if value.lower() in {"выкл", "off", "disable"}:
         value = ""
     async with db.lock:
         await db.conn.execute(
             "INSERT INTO chat_settings(chat_id,welcome_text) VALUES(?,?) "
             "ON CONFLICT(chat_id) DO UPDATE SET welcome_text=excluded.welcome_text",
-            (chat_id, value[:1000]))
+            (chat_id, value[:1000])
+        )
         await db.conn.commit()
     await message.reply("✅ Приветствие отключено." if not value else "✅ Приветствие сохранено.")
 
