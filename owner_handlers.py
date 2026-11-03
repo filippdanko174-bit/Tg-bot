@@ -145,9 +145,9 @@ async def reset_user(cb: CallbackQuery, db: DB):
     if cb.message:
         await cb.message.answer(await render_user(db, uid), reply_markup=user_keyboard(uid))
 
-@router.message()
+@router.message(lambda message: message.from_user is not None and message.from_user.id in _pending and bool(message.text))
 async def pending_value(message: Message, db: DB):
-    if not owner_ok(message.from_user) or message.from_user.id not in _pending or not message.text:
+    if not owner_ok(message.from_user):
         return
     uid, field = _pending[message.from_user.id]
     value = message.text.strip()
