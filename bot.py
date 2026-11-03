@@ -6,7 +6,7 @@ import logging
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ChatMemberStatus, ParseMode
 from aiogram.types import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
@@ -14,6 +14,7 @@ from aiogram.types import (
     BotCommandScopeDefault,
     ErrorEvent,
     Message,
+    ChatMemberUpdated,
 )
 
 import config
@@ -34,10 +35,28 @@ log = logging.getLogger("bot")
 
 
 class TrackUsers(BaseMiddleware):
-    """Запоминает ники и имена, чтобы команды работали по @нику."""
+    """Запоминает пользователей и обновляет каталог групп."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._chat_touch: dict[int, float] = {}
 
     async def __call__(self, handler, event: Message, data):
         db: DB = data["db"]
+        if event.chat.type in {"group", "supergroup"}:
+            now = asyncio.get_running_loop().time()
+            last = self._chat_touch.get(event.chat.id, 0.0)
+            if now - last >= 300:
+                try:
+                    await db.save_chat(
+                        event.chat.id,
+                        event.chat.title or "Без названия",
+                        event.chat.type,
+                        event.chat.username,
+                    )
+                    self._chat_touch[event.chat.id] = now
+                except Exception:
+                    log.exception("Не удалось обновить каталог групп")
         try:
             for user in (event.from_user, event.reply_to_message.from_user if event.reply_to_message else None):
                 if user is not None and not user.is_bot:
@@ -50,6 +69,22 @@ class TrackUsers(BaseMiddleware):
 async def on_error(event: ErrorEvent) -> bool:
     log.error("Ошибка при обработке обновления", exc_info=event.exception)
     return True
+
+async def track_my_chat_member(event: ChatMemberUpdated, db: DB) -> None:
+    """Добавляет группу при входе бота и убирает её после выхода/кика."""
+    chat = event.chat
+    if chat.type not in {"group", "supergroup"}:
+        return
+    status = event.new_chat_member.status
+    if status in {
+        ChatMemberStatus.MEMBER,
+        ChatMemberStatus.ADMINISTRATOR,
+        ChatMemberStatus.RESTRICTED,
+    }:
+        await db.save_chat(chat.id, chat.title or "Без названия", chat.type, chat.username)
+    else:
+        await db.forget_chat(chat.id)
+
 
 
 # В Telegram меню команд поддерживает только латинские имена.
@@ -134,6 +169,7 @@ async def main() -> None:
         dp = Dispatcher(db=db)
         dp.message.outer_middleware(TrackUsers())
         dp.errors.register(on_error)
+        dp.my_chat_member.register(track_my_chat_member)
         dp.include_routers(
             owner_router, mod_router, eco_router, work_router,
             shop_router, common_router, fun_router, misc_router, ai_router,
