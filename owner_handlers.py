@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from html import escape
+import secrets
+import time
 from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -12,6 +14,7 @@ from utils import Cmd, resolve_target, mention, fmt_money
 
 router = Router(name="owner")
 _pending: dict[int, tuple[int, str]] = {}
+_pending_abuse: dict[str, tuple[int, int, float]] = {}
 
 FIELDS = {
     "balance": ("Баланс", "целое число от 0 до 10^15"),
@@ -31,7 +34,7 @@ def owner_private(message: Message) -> bool:
 
 
 def callback_is_owner_private(cb: CallbackQuery) -> bool:
-    return owner_ok(cb.from_user) and cb.message is not None and cb.message.chat.type == "private" and cb.message.chat.type == "private"
+    return owner_ok(cb.from_user) and cb.message is not None and cb.message.chat.type == "private"
 
 def user_keyboard(uid: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -40,6 +43,31 @@ def user_keyboard(uid: int) -> InlineKeyboardMarkup:
     kb.button(text="⚠️ Как проверить варны", callback_data="u_warn_help")
     kb.button(text="♻️ Сбросить профиль", callback_data=f"u_reset:{uid}")
     kb.adjust(2, 2, 2, 1, 1)
+    return kb.as_markup()
+
+PANEL_TEXT = (
+    "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\n"
+    "━━━━━━━━━━━━━━━━━━\n"
+    "Выбери раздел ниже. Кнопки доступны только владельцу.\n\n"
+    "👤 Редактор профилей и подробные данные открываются в личке с ботом.\n"
+    "⚙️ Здесь находятся группы, журнал действий, роли, модерация и раздачи."
+)
+
+
+def panel_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📊 Статистика", callback_data="owner_stats")
+    kb.button(text="👥 Пользователи", callback_data="owner_users:0")
+    kb.button(text="💬 Группы", callback_data="owner_groups:0")
+    kb.button(text="🧾 Журнал админов", callback_data="owner_audit:0")
+    kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
+    kb.button(text="🏷 Роли", callback_data="owner_roles")
+    kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
+    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
+    kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
+    kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
+    kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
+    kb.adjust(2, 2, 2, 2, 2, 1)
     return kb.as_markup()
 
 async def render_user(db: DB, uid: int) -> str:
@@ -65,54 +93,23 @@ async def admin_panel(message: Message):
     if not owner_ok(message.from_user):
         await message.reply("⛔ Панель доступна только владельцу бота.")
         return
-    kb = InlineKeyboardBuilder()
-    kb.button(text="📊 Статистика", callback_data="owner_stats")
-    kb.button(text="👥 Пользователи", callback_data="owner_users:0")
-    kb.button(text="💬 Группы", callback_data="owner_groups:0")
-    kb.button(text="🧾 Журнал админов", callback_data="owner_audit:0")
-    kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
-    kb.button(text="🏷 Роли", callback_data="owner_roles")
-    kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
-    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
-    kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
-    kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
-    kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-    kb.adjust(2, 2, 2, 2, 2)
-    await message.answer(
-        "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "Выбери раздел ниже. Кнопки доступны только владельцу.\n\n"
-        "👤 Редактор профилей и подробные данные открываются в личке с ботом.\n"
-        "⚙️ Команды ролей, приветствия и экономики владельца можно использовать и в группах.",
-        reply_markup=kb.as_markup()
-    )
-
+    if message.chat.type != "private":
+        await message.reply("🔒 Открой личный чат с ботом и отправь /adminpanel.")
+        return
+    await message.answer(PANEL_TEXT, reply_markup=panel_keyboard())
 
 def callback_is_owner(cb: CallbackQuery) -> bool:
-    return owner_ok(cb.from_user) and cb.message is not None
+    return callback_is_owner_private(cb)
 
 
 @router.callback_query(F.data == "owner_panel_refresh")
 async def owner_panel_refresh(cb: CallbackQuery):
-    if not callback_is_owner(cb):
-        await cb.answer("Нет доступа", show_alert=True)
+    if not callback_is_owner_private(cb):
+        await cb.answer("Открой панель в личном чате с ботом", show_alert=True)
         return
     await cb.answer("Панель обновлена")
     if cb.message:
-        kb = InlineKeyboardBuilder()
-        kb.button(text="📊 Статистика", callback_data="owner_stats")
-        kb.button(text="👥 Пользователи", callback_data="owner_users:0")
-        kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
-        kb.button(text="🏷 Роли", callback_data="owner_roles")
-        kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
-        kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
-        kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
-        kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
-        kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-        kb.adjust(2, 2, 2, 2, 1)
-        await cb.message.edit_reply_markup(reply_markup=kb.as_markup())
-
-
+        await cb.message.edit_text(PANEL_TEXT, reply_markup=panel_keyboard())
 
 
 @router.callback_query(F.data == "owner_panel_home")
@@ -120,28 +117,9 @@ async def owner_panel_home(cb: CallbackQuery):
     if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True)
         return
-    kb = InlineKeyboardBuilder()
-    kb.button(text="📊 Статистика", callback_data="owner_stats")
-    kb.button(text="👥 Пользователи", callback_data="owner_users:0")
-    kb.button(text="🔥 Админ-абьюз / раздачи", callback_data="owner_abuse")
-    kb.button(text="🏷 Роли", callback_data="owner_roles")
-    kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
-    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
-    kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
-    kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
-    kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-    kb.adjust(2, 2, 2, 2)
     await cb.answer()
     if cb.message:
-        await cb.message.edit_text(
-            "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\\n"
-            "━━━━━━━━━━━━━━━━━━\\n"
-            "Выбери раздел ниже. Кнопки доступны только владельцу.\\n\\n"
-            "👥 Список пользователей и просмотр профилей.\\n"
-            "⚙️ Управление ролями, приветствиями и модерацией.",
-            reply_markup=kb.as_markup()
-        )
-
+        await cb.message.edit_text(PANEL_TEXT, reply_markup=panel_keyboard())
 
 @router.callback_query(F.data == "owner_abuse")
 async def owner_abuse_menu(cb: CallbackQuery):
