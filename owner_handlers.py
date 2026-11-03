@@ -199,7 +199,7 @@ async def pending_value(message: Message, db: DB):
 
 
 
-# ---------- управление пользовательскими ролями (только владелец в ЛС) ----------
+# ---------- управление пользовательскими ролями (только владелец, из любого чата) ----------
 
 @router.message(Cmd("роли", "roles"))
 async def list_roles(message: Message, db: DB):
