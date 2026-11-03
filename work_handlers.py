@@ -95,6 +95,11 @@ async def cmd_work(message: Message, db: DB) -> None:
     bonus = random.random() < config.BONUS_CHANCE
     if bonus:
         pay = int(pay * config.BONUS_MULT)
+    title_bonuses = {"bronze": 2, "silver": 5, "gold": 8, "star": 12, "crown": 15}
+    active_title = row["active_title"] if "active_title" in row.keys() else ""
+    title_bonus = title_bonuses.get(active_title, 0)
+    if title_bonus:
+        pay += pay * title_bonus // 100
     if not await db.do_shift(user.id, job.id, pay, now, cooldown):
         await message.reply("⏳ Смена уже засчитана, подожди немного.")
         return
@@ -104,7 +109,7 @@ async def cmd_work(message: Message, db: DB) -> None:
         f"{job.emoji} <b>{job.name}</b>: смена отработана!",
         random.choice(job.flavors),
         "",
-        f"💵 +{fmt_money(pay)}" + (" (🎉 премия!)" if bonus else ""),
+        f"💵 +{fmt_money(pay)}" + (" (🎉 премия!)" if bonus else "") + (f" (бонус титула +{title_bonus}%)" if title_bonus else ""),
         f"💰 Баланс: <b>{fmt_money(row['balance'])}</b>",
         f"📅 Смен всего: <b>{row['total_shifts']}</b>",
     ]
@@ -191,6 +196,11 @@ async def cmd_profile(message: Message, args: list[str], db: DB) -> None:
     row = await db.get_user(uid)
     if row["custom_nick"]:
         name = row["custom_nick"]
+    title_icons = {"bronze": "🥉", "silver": "🥈", "gold": "🥇", "star": "⭐", "crown": "👑"}
+    active_title = row["active_title"] if "active_title" in row.keys() else ""
+    title_icon = title_icons.get(active_title, "")
+    if title_icon:
+        name = f"{title_icon} {name}"
     job = JOBS_BY_ID.get(row["job_id"]) if row["job_id"] else None
     total = row["total_shifts"]
     lines = [
