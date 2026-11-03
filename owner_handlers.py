@@ -31,7 +31,7 @@ def owner_private(message: Message) -> bool:
 
 
 def callback_is_owner_private(cb: CallbackQuery) -> bool:
-    return owner_ok(cb.from_user) and cb.message is not None and cb.message.chat.type == "private"
+    return owner_ok(cb.from_user) and cb.message is not None and cb.message.chat.type == "private" and cb.message.chat.type == "private"
 
 def user_keyboard(uid: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -68,13 +68,15 @@ async def admin_panel(message: Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="📊 Статистика", callback_data="owner_stats")
     kb.button(text="👥 Пользователи", callback_data="owner_users:0")
+    kb.button(text="💬 Группы", callback_data="owner_groups:0")
+    kb.button(text="🧾 Журнал админов", callback_data="owner_audit:0")
     kb.button(text="🏷 Роли", callback_data="owner_roles")
     kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
     kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
     kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
     kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
     kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-    kb.adjust(2, 2, 2, 2, 1)
+    kb.adjust(2, 2, 2, 2, 2)
     await message.answer(
         "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -136,6 +138,55 @@ async def owner_panel_home(cb: CallbackQuery):
             "⚙️ Управление ролями, приветствиями и модерацией.",
             reply_markup=kb.as_markup()
         )
+
+
+@router.callback_query(F.data.startswith("owner_groups:"))
+async def owner_groups(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    page = max(0, int(cb.data.split(":")[-1]))
+    per_page = 8
+    async with db.conn.execute("SELECT COUNT(*) AS n FROM known_chats") as cur:
+        total = (await cur.fetchone())["n"]
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages - 1)
+    async with db.conn.execute("SELECT * FROM known_chats ORDER BY last_seen DESC LIMIT ? OFFSET ?", (per_page, page*per_page)) as cur:
+        rows = await cur.fetchall()
+    lines = [f"💬 <b>ГРУППЫ С БОТОМ</b> · {total}", f"Страница {page+1}/{pages}", ""]
+    for row in rows:
+        lines.append(f"• <b>{escape(row['title'] or 'Без названия')}</b>\nID: <code>{row['chat_id']}</code> · {escape(row['chat_type'])}")
+    kb = InlineKeyboardBuilder()
+    if page: kb.button(text="⬅️", callback_data=f"owner_groups:{page-1}")
+    if page+1 < pages: kb.button(text="➡️", callback_data=f"owner_groups:{page+1}")
+    kb.button(text="🏠 Панель", callback_data="owner_panel_home")
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text("\n".join(lines), reply_markup=kb.as_markup())
+
+
+@router.callback_query(F.data.startswith("owner_audit:"))
+async def owner_audit(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    page = max(0, int(cb.data.split(":")[-1]))
+    per_page = 10
+    async with db.conn.execute("SELECT COUNT(*) AS n FROM admin_audit") as cur:
+        total = (await cur.fetchone())["n"]
+    pages = max(1, (total+per_page-1)//per_page)
+    page = min(page,pages-1)
+    async with db.conn.execute("SELECT * FROM admin_audit ORDER BY id DESC LIMIT ? OFFSET ?",(per_page,page*per_page)) as cur:
+        rows=await cur.fetchall()
+    lines=[f"🧾 <b>ЖУРНАЛ ДЕЙСТВИЙ АДМИНОВ</b> · {total}",f"Страница {page+1}/{pages}",""]
+    for row in rows:
+        lines.append(f"• <b>{escape(row['action'])}</b> · админ <code>{row['actor_id']}</code>\nЧат <code>{row['chat_id']}</code> · цель <code>{row['target_id'] or '—'}</code>\n{escape(row['details'] or '')}")
+    kb=InlineKeyboardBuilder()
+    if page: kb.button(text="⬅️",callback_data=f"owner_audit:{page-1}")
+    if page+1<pages: kb.button(text="➡️",callback_data=f"owner_audit:{page+1}")
+    kb.button(text="🏠 Панель",callback_data="owner_panel_home")
+    await cb.answer()
+    if cb.message: await cb.message.edit_text("\n".join(lines),reply_markup=kb.as_markup())
 
 
 @router.callback_query(F.data.startswith("owner_users:"))
