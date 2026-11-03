@@ -66,10 +66,11 @@ async def buy_item(cb: CallbackQuery, db: DB):
             await cb.answer("Не удалось провести покупку. Попробуй ещё раз.", show_alert=True)
             return
         await db.conn.execute("INSERT INTO shop_inventory(user_id,item_id) VALUES(?,?)", (owner, key))
+        await db.conn.execute("UPDATE users SET active_title=? WHERE user_id=?", (key, owner))
         await db.conn.commit()
     await cb.answer("Покупка успешна! 🎉", show_alert=True)
     if cb.message:
-        await cb.message.answer(f"🎉 Куплено: {name} за {price} 🪙\nПредмет в твоей коллекции. Напиши /инвентарь.")
+        await cb.message.answer(f"🎉 Куплено и надето: {name} за {price} 🪙\nПредмет в твоей коллекции. Напиши /инвентарь.")
 
 @router.callback_query(F.data.startswith("shop_inventory:"))
 async def inventory_button(cb: CallbackQuery, db: DB):
@@ -88,13 +89,56 @@ async def inventory_button(cb: CallbackQuery, db: DB):
 async def send_inventory(message: Message, uid: int, db: DB):
     async with db.conn.execute("SELECT item_id FROM shop_inventory WHERE user_id=? ORDER BY bought_at", (uid,)) as cur:
         rows = await cur.fetchall()
-    names = [ITEMS[r["item_id"]][0] for r in rows if r["item_id"] in ITEMS]
-    if not names:
-        await message.answer("🎒 <b>Коллекция пуста.</b>\nЗагляни в /магазин!")
-    else:
-        await message.answer("🎒 <b>ТВОЯ КОЛЛЕКЦИЯ</b>\n\n" + "\n".join("• " + n for n in names))
+    async with db.conn.execute("SELECT active_title FROM users WHERE user_id=?", (uid,)) as cur:
+        active_row = await cur.fetchone()
+    active = active_row["active_title"] if active_row else ""
+    if not rows:
+        await message.answer("🎒 <b>Коллекция пуста.</b>\\nЗагляни в /магазин!")
+        return
+    kb = InlineKeyboardBuilder()
+    lines = ["🎒 <b>ТВОЯ КОЛЛЕКЦИЯ</b>", ""]
+    for row in rows:
+        key = row["item_id"]
+        if key not in ITEMS:
+            continue
+        name = ITEMS[key][0]
+        marker = " ✅ надет" if key == active else ""
+        lines.append(f"• {name}{marker}")
+        if key != active:
+            kb.button(text=f"Надеть: {name}", callback_data=f"shop_equip:{key}:{uid}")
+    kb.button(text="Снять титул", callback_data=f"shop_equip:none:{uid}")
+    kb.adjust(1)
+    await message.answer("\\n".join(lines), reply_markup=kb.as_markup())
 
 @router.message(Cmd("инвентарь", "коллекция", "inventory"))
 async def inventory_command(message: Message, db: DB):
     if message.from_user:
         await send_inventory(message, message.from_user.id, db)
+
+
+@router.callback_query(F.data.startswith("shop_equip:"))
+async def equip_title(cb: CallbackQuery, db: DB):
+    try:
+        _, key, owner_s = cb.data.split(":")
+        owner = int(owner_s)
+    except (ValueError, AttributeError):
+        await cb.answer("Ошибка", show_alert=True)
+        return
+    if cb.from_user.id != owner:
+        await cb.answer("Это не твоя коллекция.", show_alert=True)
+        return
+    if key != "none":
+        if key not in ITEMS:
+            await cb.answer("Такого титула нет.", show_alert=True)
+            return
+        async with db.conn.execute("SELECT 1 FROM shop_inventory WHERE user_id=? AND item_id=?", (owner, key)) as cur:
+            owned = await cur.fetchone()
+        if not owned:
+            await cb.answer("Сначала купи этот титул.", show_alert=True)
+            return
+    async with db.lock:
+        await db.conn.execute("UPDATE users SET active_title=? WHERE user_id=?", ("" if key == "none" else key, owner))
+        await db.conn.commit()
+    await cb.answer("Титул надет!" if key != "none" else "Титул снят!", show_alert=True)
+    if cb.message:
+        await send_inventory(cb.message, owner, db)
