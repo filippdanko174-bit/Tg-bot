@@ -24,6 +24,28 @@ async def init_features(db):
             chat_id INTEGER PRIMARY KEY,
             welcome_text TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS known_chats (
+            chat_id INTEGER PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            chat_type TEXT NOT NULL DEFAULT '',
+            username TEXT NOT NULL DEFAULT '',
+            last_seen REAL NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE TABLE IF NOT EXISTS admin_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            actor_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            target_id INTEGER,
+            details TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit(created_at DESC);
+        CREATE TABLE IF NOT EXISTS global_blocks (
+            user_id INTEGER PRIMARY KEY,
+            reason TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+        );
         CREATE TABLE IF NOT EXISTS mention_optins (
             chat_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
