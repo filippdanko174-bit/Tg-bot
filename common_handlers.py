@@ -77,4 +77,4 @@ async def cmd_id(message: Message) -> None:
     if reply is not None and reply.from_user is not None and reply.forum_topic_created is None:
         lines.append(f"🆔 ID автора сообщения: <code>{reply.from_user.id}</code>")
     lines.append(f"💬 ID чата: <code>{message.chat.id}</code>")
-    await message.reply("\\n".join(lines))
+    await message.reply("\n".join(lines))
