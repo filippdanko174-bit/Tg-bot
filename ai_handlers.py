@@ -26,6 +26,21 @@ SYSTEM_PROMPT = (
     "если пользователь пишет по-русски. Будь полезным, ясным и кратким."
 )
 
+_bot_identity: tuple[int, str] | None = None
+_bot_identity_lock = asyncio.Lock()
+
+
+async def _get_bot_identity(bot: Bot) -> tuple[int, str]:
+    """Запрашивает профиль бота один раз, а не на каждое обычное сообщение."""
+    global _bot_identity
+    if _bot_identity is None:
+        async with _bot_identity_lock:
+            if _bot_identity is None:
+                me = await bot.get_me()
+                _bot_identity = (me.id, me.username or "")
+    return _bot_identity
+
+
 
 def _history_key(message: Message) -> tuple[int, int]:
     return (message.chat.id, message.from_user.id if message.from_user else message.chat.id)
@@ -109,12 +124,11 @@ async def cmd_ai(message: Message, bot: Bot) -> None:
 async def chat_with_ai(message: Message, bot: Bot) -> None:
     if not message.from_user or message.from_user.is_bot:
         return
-    me = await bot.get_me()
-    username = me.username or ""
+    bot_id, username = await _get_bot_identity(bot)
     is_reply_to_bot = bool(
         message.reply_to_message
         and message.reply_to_message.from_user
-        and message.reply_to_message.from_user.id == me.id
+        and message.reply_to_message.from_user.id == bot_id
     )
     is_mention = bool(username and re.search(rf"@{re.escape(username)}\b", message.text or "", re.IGNORECASE))
     if not (is_reply_to_bot or is_mention):
