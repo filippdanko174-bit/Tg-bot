@@ -93,7 +93,7 @@ async def send_inventory(message: Message, uid: int, db: DB):
         active_row = await cur.fetchone()
     active = active_row["active_title"] if active_row else ""
     if not rows:
-        await message.answer("🎒 <b>Коллекция пуста.</b>\\nЗагляни в /магазин!")
+        await message.answer("🎒 <b>Коллекция пуста.</b>\nЗагляни в /магазин!")
         return
     kb = InlineKeyboardBuilder()
     lines = ["🎒 <b>ТВОЯ КОЛЛЕКЦИЯ</b>", ""]
@@ -108,7 +108,7 @@ async def send_inventory(message: Message, uid: int, db: DB):
             kb.button(text=f"Надеть: {name}", callback_data=f"shop_equip:{key}:{uid}")
     kb.button(text="Снять титул", callback_data=f"shop_equip:none:{uid}")
     kb.adjust(1)
-    await message.answer("\\n".join(lines), reply_markup=kb.as_markup())
+    await message.answer("\n".join(lines), reply_markup=kb.as_markup())
 
 @router.message(Cmd("инвентарь", "коллекция", "inventory"))
 async def inventory_command(message: Message, db: DB):
@@ -166,4 +166,4 @@ async def title_info(message: Message, db: DB):
         lines += ["", "Сейчас титул не надет. Купи его в /магазин, затем выбери в /инвентарь."]
     else:
         lines += ["", "Сменить или снять титул можно в /инвентарь."]
-    await message.answer("\\n".join(lines))
+    await message.answer("\n".join(lines))
