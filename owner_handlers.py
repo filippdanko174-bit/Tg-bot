@@ -152,15 +152,14 @@ async def owner_abuse_menu(cb: CallbackQuery):
     for amount in (100, 500, 1000, 5000, 10000):
         kb.button(text=f"🪙 Раздать всем по {amount:,}".replace(",", " "), callback_data=f"owner_abuse_prepare:{amount}")
     kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
-    kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
     kb.button(text="🏠 Панель", callback_data="owner_panel_home")
     kb.adjust(1)
     await cb.answer()
     if cb.message:
         await cb.message.edit_text(
-            "🔥 <b>АДМИН-АБЬЮЗ · РАЗДАЧИ</b>\\n\\n"
+            "🔥 <b>АДМИН-АБЬЮЗ · РАЗДАЧИ</b>\n\n"
             "Выбери массовую раздачу монет всем пользователям, которые есть в базе бота. "
-            "Перед начислением будет отдельное подтверждение.\\n"
+            "Перед начислением будет отдельное подтверждение.\n"
             "Раздача не отправляет личные сообщения участникам.",
             reply_markup=kb.as_markup()
         )
@@ -186,8 +185,8 @@ async def owner_abuse_prepare(cb: CallbackQuery):
     await cb.answer()
     if cb.message:
         await cb.message.edit_text(
-            f"⚠️ <b>Подтверждение раздачи</b>\\n\\n"
-            f"Каждому пользователю из базы будет начислено <b>{amount:,}</b> монет.\\n"
+            f"⚠️ <b>Подтверждение раздачи</b>\n\n"
+            f"Каждому пользователю из базы будет начислено <b>{amount:,}</b> монет.\n"
             "Операция необратима. Продолжить?".replace(",", " "),
             reply_markup=kb.as_markup()
         )
@@ -229,8 +228,8 @@ async def owner_abuse_confirm(cb: CallbackQuery, db: DB):
     await cb.answer("Раздача выполнена")
     if cb.message:
         await cb.message.edit_text(
-            "🎉 <b>РАЗДАЧА ЗАВЕРШЕНА!</b>\\n"
-            f"👥 Получателей в базе: <b>{count}</b>\\n"
+            "🎉 <b>РАЗДАЧА ЗАВЕРШЕНА!</b>\n"
+            f"👥 Получателей в базе: <b>{count}</b>\n"
             f"🪙 Начислено всего: <b>{credited:,}</b> монет".replace(",", " "),
             reply_markup=kb.as_markup()
         )
