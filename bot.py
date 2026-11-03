@@ -22,6 +22,9 @@ from db import DB
 from eco_handlers import router as eco_router
 from mod_handlers import router as mod_router
 from work_handlers import router as work_router
+from owner_handlers import router as owner_router
+from casino_handlers import router as casino_router
+from feature_db import init_features
 
 log = logging.getLogger("bot")
 
@@ -54,6 +57,9 @@ PUBLIC_COMMANDS = [
     BotCommand(command="top", description="Самые богатые"),
     BotCommand(command="quit", description="Уволиться"),
     BotCommand(command="warns", description="Сколько варнов"),
+    BotCommand(command="slots", description="Мини-игра: слоты"),
+    BotCommand(command="dice", description="Мини-игра: кости"),
+    BotCommand(command="roulette", description="Мини-игра: рулетка"),
     BotCommand(command="help", description="Все команды"),
 ]
 ADMIN_COMMANDS = PUBLIC_COMMANDS + [
@@ -78,6 +84,7 @@ async def main() -> None:
 
     db = DB(config.DB_PATH)
     await db.init()
+    await init_features(db)
 
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     me = await bot.get_me()
@@ -87,7 +94,7 @@ async def main() -> None:
     dp = Dispatcher(db=db)
     dp.message.outer_middleware(TrackUsers())
     dp.errors.register(on_error)
-    dp.include_routers(mod_router, eco_router, work_router, common_router)
+    dp.include_routers(owner_router, casino_router, mod_router, eco_router, work_router, common_router)
 
     try:
         await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
