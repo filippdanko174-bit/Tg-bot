@@ -139,13 +139,6 @@ OWNER_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand(command="adminpanel", description="Закрытая панель владельца"),
     BotCommand(command="setstat", description="Изменить профиль пользователя"),
     BotCommand(command="useredit", description="Редактор пользователя"),
-    BotCommand(command="welcome", description="Настроить приветствие группы"),
-    BotCommand(command="roles", description="Список пользовательских ролей"),
-    BotCommand(command="rolecreate", description="Создать роль и приоритет 0–100"),
-    BotCommand(command="roledelete", description="Удалить пользовательскую роль"),
-    BotCommand(command="rolepriority", description="Изменить приоритет роли"),
-    BotCommand(command="roleset", description="Назначить роль пользователю"),
-    BotCommand(command="roleremove", description="Снять роль с пользователя"),
 ]
 
 
