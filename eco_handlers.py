@@ -62,7 +62,11 @@ async def cmd_top(message: Message, db: DB) -> None:
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     lines = ["🏆 <b>Самые богатые</b>", ""]
     for i, row in enumerate(rows, 1):
-        lines.append(f"{medals.get(i, f'{i}.')} {escape(row_name(row))} — {fmt_money(row['balance'])}")
+        async with db.conn.execute("SELECT active_title FROM users WHERE user_id=?", (row["user_id"],)) as cur:
+            title_row = await cur.fetchone()
+        icons = {"bronze": "🥉", "silver": "🥈", "gold": "🥇", "star": "⭐", "crown": "👑"}
+        prefix = icons.get(title_row["active_title"], "") + " " if title_row else ""
+        lines.append(f"{medals.get(i, f'{i}.')} {prefix}{escape(row_name(row))} — {fmt_money(row['balance'])}")
     await message.reply("\n".join(lines))
 
 
