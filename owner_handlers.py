@@ -212,8 +212,8 @@ async def list_roles(message: Message, db: DB):
         return
     lines = ["🏷 <b>Роли сервера</b> (приоритет 0–100):"]
     lines.extend(f"• <b>{escape(row['name'])}</b> — приоритет <b>{row['priority']}</b>" for row in rows)
-    lines.append("\\nИзменить: /приоритетроль Название 75\\nУдалить: /удалитьроль Название")
-    await message.answer("\\n".join(lines))
+    lines.append("\nИзменить: /приоритетроль Название 75\nУдалить: /удалитьроль Название")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Cmd("создатьроль", "rolecreate"))
