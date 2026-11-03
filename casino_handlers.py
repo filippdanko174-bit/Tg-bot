@@ -35,7 +35,8 @@ async def play(message: Message, db: DB, amount_token: str, game: str, choice: s
             await message.reply("Укажи цвет: /рулетка 100 красное (или чёрное / зелёное).")
             return
         pick = random.randint(0, 36)
-        color = "зелёное" if pick == 0 else ("красное" if pick % 2 else "чёрное")
+        red_numbers = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
+        color = "зелёное" if pick == 0 else ("красное" if pick in red_numbers else "чёрное")
         multiplier = 14 if choice == "зелёное" and color == "зелёное" else (2 if choice == color else 0)
         outcome = f"🎡 Выпало {pick} ({color}); твой выбор: {choice}"
     async with db.lock:
