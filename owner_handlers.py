@@ -60,20 +60,21 @@ async def render_user(db: DB, uid: int) -> str:
         f"Заработано: {fmt_money(row['total_earned'])}"
     )
 
-@router.message(Cmd("панель", "adminpanel"))
+@router.message(Cmd("сетстат", "setstat"))
 async def admin_panel(message: Message):
     if not owner_ok(message.from_user):
         await message.reply("⛔ Панель доступна только владельцу бота.")
         return
     kb = InlineKeyboardBuilder()
     kb.button(text="📊 Статистика", callback_data="owner_stats")
+    kb.button(text="👥 Пользователи", callback_data="owner_users:0")
     kb.button(text="🏷 Роли", callback_data="owner_roles")
     kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
     kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
     kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
     kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
     kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-    kb.adjust(2, 2, 2, 1)
+    kb.adjust(2, 2, 2, 2, 1)
     await message.answer(
         "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -97,14 +98,78 @@ async def owner_panel_refresh(cb: CallbackQuery):
     if cb.message:
         kb = InlineKeyboardBuilder()
         kb.button(text="📊 Статистика", callback_data="owner_stats")
+        kb.button(text="👥 Пользователи", callback_data="owner_users:0")
         kb.button(text="🏷 Роли", callback_data="owner_roles")
         kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
         kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
         kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
         kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
         kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
-        kb.adjust(2, 2, 2, 1)
+        kb.adjust(2, 2, 2, 2, 1)
         await cb.message.edit_reply_markup(reply_markup=kb.as_markup())
+
+
+
+@router.callback_query(F.data.startswith("owner_users:"))
+async def owner_users(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Открой панель в личном чате с ботом", show_alert=True)
+        return
+    try:
+        page = max(0, int(cb.data.split(":", 1)[1]))
+    except (ValueError, IndexError):
+        await cb.answer("Некорректная страница", show_alert=True)
+        return
+    per_page = 8
+    async with db.conn.execute("SELECT COUNT(*) AS n FROM users") as cur:
+        total = (await cur.fetchone())["n"]
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages - 1)
+    async with db.conn.execute(
+        "SELECT user_id, username, first_name, balance, role FROM users "
+        "ORDER BY user_id DESC LIMIT ? OFFSET ?", (per_page, page * per_page)
+    ) as cur:
+        rows = await cur.fetchall()
+    lines = [f"👥 <b>ПОЛЬЗОВАТЕЛИ БОТА</b> · {total}", f"Страница {page + 1}/{pages}", ""]
+    kb = InlineKeyboardBuilder()
+    for row in rows:
+        name = row["first_name"] or (f"@{row['username']}" if row["username"] else str(row["user_id"]))
+        role = f" · {row['role']}" if row["role"] else ""
+        lines.append(f"• {escape(name)} · <code>{row['user_id']}</code>{escape(role)}")
+        kb.button(text=f"👤 {name[:24]}", callback_data=f"owner_user_view:{row['user_id']}")
+    kb.adjust(1)
+    nav = InlineKeyboardBuilder()
+    if page > 0:
+        nav.button(text="⬅️ Назад", callback_data=f"owner_users:{page - 1}")
+    if page + 1 < pages:
+        nav.button(text="Вперёд ➡️", callback_data=f"owner_users:{page + 1}")
+    nav.button(text="🔄 Обновить", callback_data=f"owner_users:{page}")
+    nav.button(text="🏠 В панель", callback_data="owner_panel_refresh")
+    nav.adjust(2, 2)
+    kb_buttons = kb.as_markup().inline_keyboard + nav.as_markup().inline_keyboard
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text("\\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_buttons))
+
+
+@router.callback_query(F.data.startswith("owner_user_view:"))
+async def owner_user_view(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        uid = int(cb.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        await cb.answer("Некорректный пользователь", show_alert=True)
+        return
+    await cb.answer()
+    if cb.message:
+        kb = user_keyboard(uid)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="⬅️ К списку", callback_data="owner_users:0")
+        for row in kb.inline_keyboard:
+            builder.row(*row)
+        await cb.message.answer(await render_user(db, uid), reply_markup=builder.as_markup())
 
 
 @router.callback_query(F.data == "owner_stats")
