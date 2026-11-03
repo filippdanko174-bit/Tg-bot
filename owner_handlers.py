@@ -25,6 +25,14 @@ FIELDS = {
 def owner_ok(user) -> bool:
     return user is not None and user.id in config.OWNER_IDS
 
+
+def owner_private(message: Message) -> bool:
+    return message.chat.type == "private" and owner_ok(message.from_user)
+
+
+def callback_is_owner_private(cb: CallbackQuery) -> bool:
+    return owner_ok(cb.from_user) and cb.message is not None and cb.message.chat.type == "private"
+
 def user_keyboard(uid: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for field, (label, _) in FIELDS.items():
@@ -54,7 +62,7 @@ async def render_user(db: DB, uid: int) -> str:
 
 @router.message(Cmd("панель", "adminpanel"))
 async def admin_panel(message: Message):
-    if not owner_ok(message.from_user):
+    if not owner_private(message):
         return
     kb = InlineKeyboardBuilder()
     kb.button(text="👤 Редактировать пользователя", callback_data="owner_user_help")
@@ -71,7 +79,7 @@ async def admin_panel(message: Message):
 
 @router.callback_query(F.data == "owner_user_help")
 async def owner_user_help(cb: CallbackQuery):
-    if not owner_ok(cb.from_user):
+    if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True); return
     await cb.answer()
     if cb.message:
@@ -79,15 +87,15 @@ async def owner_user_help(cb: CallbackQuery):
 
 @router.callback_query(F.data == "owner_welcome_help")
 async def owner_welcome_help(cb: CallbackQuery):
-    if not owner_ok(cb.from_user):
+    if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True); return
     await cb.answer()
     if cb.message:
-        await cb.message.answer("В группе: /приветствие Привет, {name}!\nОтключить: /приветствие выкл")
+        await cb.message.answer("Укажи ID группы: /welcome -1001234567890 Привет, {name}!\nОтключить: /welcome -1001234567890 off")
 
 @router.message(Cmd("юзер", "useredit"))
 async def edit_user(message: Message, args: list[str], db: DB):
-    if not owner_ok(message.from_user):
+    if not owner_private(message):
         return
     target = await resolve_target(message, args, db)
     if target is None:
@@ -97,7 +105,7 @@ async def edit_user(message: Message, args: list[str], db: DB):
 
 @router.callback_query(F.data.startswith("u_edit:"))
 async def edit_field(cb: CallbackQuery):
-    if not owner_ok(cb.from_user):
+    if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True); return
     try:
         _, uid_s, field = cb.data.split(":")
@@ -115,7 +123,7 @@ async def edit_field(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("u_warn:"))
 async def show_warns(cb: CallbackQuery, db: DB):
-    if not owner_ok(cb.from_user):
+    if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True); return
     uid = int(cb.data.split(":")[1])
     chat_id = cb.message.chat.id if cb.message else 0
@@ -127,7 +135,7 @@ async def show_warns(cb: CallbackQuery, db: DB):
 
 @router.callback_query(F.data.startswith("u_reset:"))
 async def reset_user(cb: CallbackQuery, db: DB):
-    if not owner_ok(cb.from_user):
+    if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True); return
     uid = int(cb.data.split(":")[1])
     async with db.lock:
@@ -142,7 +150,7 @@ async def reset_user(cb: CallbackQuery, db: DB):
 
 @router.message(lambda message: message.from_user is not None and message.from_user.id in _pending and bool(message.text))
 async def pending_value(message: Message, db: DB):
-    if not owner_ok(message.from_user):
+    if not owner_private(message):
         return
     uid, field = _pending[message.from_user.id]
     value = message.text.strip()
@@ -186,20 +194,29 @@ async def pending_value(message: Message, db: DB):
 
 @router.message(Cmd("приветствие", "welcome"))
 async def set_welcome(message: Message, args: list[str], db: DB):
-    if not owner_ok(message.from_user):
+    if not owner_private(message):
+        if message.chat.type != "private":
+            await message.reply("⛔ Настраивать приветствие можно только в ЛС бота.")
         return
-    if message.chat.type not in {"group", "supergroup"}:
-        await message.reply("Настраивай приветствие в нужной группе."); return
-    value = " ".join(args)
-    if not value:
-        await message.reply("Формат: /приветствие Привет, {name}! или /приветствие выкл"); return
+    if len(args) < 2:
+        await message.reply(
+            "Формат в ЛС бота: <code>/welcome ID_ГРУППЫ Привет, {name}!</code>\n"
+            "Отключить: <code>/welcome ID_ГРУППЫ off</code>."
+        )
+        return
+    try:
+        chat_id = int(args[0])
+    except ValueError:
+        await message.reply("Первым аргументом укажи числовой ID группы, например -1001234567890.")
+        return
+    value = " ".join(args[1:])
     if value.lower() in {"выкл", "off", "disable"}:
         value = ""
     async with db.lock:
         await db.conn.execute(
             "INSERT INTO chat_settings(chat_id,welcome_text) VALUES(?,?) "
             "ON CONFLICT(chat_id) DO UPDATE SET welcome_text=excluded.welcome_text",
-            (message.chat.id, value[:1000]))
+            (chat_id, value[:1000]))
         await db.conn.commit()
     await message.reply("✅ Приветствие отключено." if not value else "✅ Приветствие сохранено.")
 
