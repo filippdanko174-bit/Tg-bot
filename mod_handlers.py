@@ -330,7 +330,17 @@ async def cmd_purge(message: Message, bot: Bot) -> None:
     if end - start + 1 > 100:
         start = end - 99
     try:
-        await bot.delete_messages(message.chat.id, list(range(start, end + 1)))
+        message_ids = list(range(start, end + 1))
+        delete_many = getattr(bot, "delete_messages", None)
+        if delete_many is not None:
+            await delete_many(message.chat.id, message_ids)
+        else:
+            # Совместимость со старыми версиями aiogram без deleteMessages.
+            for message_id in message_ids:
+                try:
+                    await bot.delete_message(message.chat.id, message_id)
+                except TelegramAPIError:
+                    continue
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
