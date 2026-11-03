@@ -68,6 +68,42 @@ async def cmd_staff(message: Message, db: DB) -> None:
     await message.reply("\n".join(lines))
 
 
+
+@router.message(Cmd("роль", "role"))
+async def cmd_role(message: Message, args: list[str], db: DB) -> None:
+    """Показывает роль автора или указанного участника."""
+    if not args and message.reply_to_message and message.reply_to_message.from_user:
+        target_user = message.reply_to_message.from_user
+        user_id, display_name = target_user.id, target_user.full_name
+    elif not args:
+        if message.from_user is None:
+            await message.reply("Не удалось определить пользователя.")
+            return
+        user_id, display_name = message.from_user.id, message.from_user.full_name
+    else:
+        from utils import resolve_target
+        target = await resolve_target(message, args, db)
+        if target is None or target.rest:
+            await message.reply("Формат: <code>/роль</code> — твоя роль; <code>/роль @ник</code> — роль участника; либо ответь на его сообщение командой /роль.")
+            return
+        user_id, display_name = target.user_id, target.name
+
+    row = await db.get_user(user_id)
+    role_name = row["role"] if row and row["role"] else ""
+    if not role_name:
+        await message.reply(f"👤 {escape(display_name)}\\n🏷 Роль: <b>не назначена</b>")
+        return
+    async with db.conn.execute(
+        "SELECT priority FROM custom_roles WHERE name=? COLLATE NOCASE", (role_name,)
+    ) as cur:
+        role_row = await cur.fetchone()
+    priority = role_row["priority"] if role_row else 0
+    await message.reply(
+        f"👤 {escape(display_name)}\\n"
+        f"🏷 Роль: <b>{escape(role_name)}</b>\\n"
+        f"⭐ Приоритет: <b>{priority}/100</b>"
+    )
+
 @router.message(Cmd("id", "айди"))
 async def cmd_id(message: Message) -> None:
     lines = []
