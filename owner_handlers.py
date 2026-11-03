@@ -59,7 +59,6 @@ async def admin_panel(message: Message):
     kb = InlineKeyboardBuilder()
     kb.button(text="👤 Редактировать пользователя", callback_data="owner_user_help")
     kb.button(text="👋 Настроить приветствие", callback_data="owner_welcome_help")
-    kb.button(text="🎮 Игровые команды и правила", callback_data="owner_games_help")
     kb.adjust(1)
     await message.answer(
         "👑 <b>Панель владельца</b>\n\n"
@@ -85,14 +84,6 @@ async def owner_welcome_help(cb: CallbackQuery):
     await cb.answer()
     if cb.message:
         await cb.message.answer("В группе: /приветствие Привет, {name}!\nОтключить: /приветствие выкл")
-
-@router.callback_query(F.data == "owner_games_help")
-async def owner_games_help(cb: CallbackQuery):
-    if not owner_ok(cb.from_user):
-        await cb.answer("Нет доступа", show_alert=True); return
-    await cb.answer()
-    if cb.message:
-        await cb.message.answer("Игры используют только виртуальные монеты: /слоты сумма, /кости сумма, /рулетка сумма. Денежного вывода нет.")
 
 @router.message(Cmd("юзер", "useredit"))
 async def edit_user(message: Message, args: list[str], db: DB):
