@@ -26,6 +26,7 @@ from work_handlers import router as work_router
 from owner_handlers import router as owner_router
 from feature_db import init_features
 from shop_handlers import router as shop_router
+from fun_handlers import router as fun_router
 
 log = logging.getLogger("bot")
 
@@ -67,6 +68,9 @@ PUBLIC_COMMANDS = [
     BotCommand(command="quit", description="Уволиться с работы"),
     BotCommand(command="staff", description="Список стаффа"),
     BotCommand(command="role", description="Посмотреть свою или чужую роль"),
+    BotCommand(command="zavoz", description="Запустить мемный завоз"),
+    BotCommand(command="vibe", description="Проверить свой вайб"),
+    BotCommand(command="rofl", description="Случайная шутка"),
     BotCommand(command="warns", description="Количество предупреждений"),
     BotCommand(command="zov_on", description="Включить упоминания"),
     BotCommand(command="zov_off", description="Отключить упоминания"),
@@ -121,7 +125,7 @@ async def main() -> None:
     dp = Dispatcher(db=db)
     dp.message.outer_middleware(TrackUsers())
     dp.errors.register(on_error)
-    dp.include_routers(owner_router, mod_router, eco_router, work_router, shop_router, common_router)
+    dp.include_routers(owner_router, mod_router, eco_router, work_router, shop_router, common_router, fun_router)
 
     try:
         await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
