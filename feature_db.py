@@ -8,6 +8,12 @@ async def init_features(db):
         if "role" not in columns:
             await db.conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT ''")
         await db.conn.executescript("""
+        CREATE TABLE IF NOT EXISTS shop_inventory (
+            user_id INTEGER NOT NULL,
+            item_id TEXT NOT NULL,
+            bought_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+            PRIMARY KEY(user_id,item_id)
+        );
         CREATE TABLE IF NOT EXISTS chat_settings (
             chat_id INTEGER PRIMARY KEY,
             welcome_text TEXT NOT NULL DEFAULT ''
