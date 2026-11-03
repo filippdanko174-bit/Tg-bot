@@ -127,8 +127,12 @@ async def show_warns(cb: CallbackQuery, db: DB):
     if not owner_ok(cb.from_user):
         await cb.answer("Нет доступа", show_alert=True); return
     uid = int(cb.data.split(":")[1])
-    count = await db.get_warns(cb.message.chat.id, uid) if cb.message else 0
-    await cb.answer(f"Варны в этом чате: {count}", show_alert=True)
+    chat_id = cb.message.chat.id if cb.message else 0
+    count = await db.get_warns(chat_id, uid) if chat_id else 0
+    _pending[cb.from_user.id] = (uid, f"warns:{chat_id}")
+    await cb.answer(f"Сейчас варнов: {count}", show_alert=True)
+    if cb.message:
+        await cb.message.answer(f"Отправь новое число варнов для пользователя {uid} в этом чате (0–1000).")
 
 @router.callback_query(F.data.startswith("u_reset:"))
 async def reset_user(cb: CallbackQuery, db: DB):
@@ -151,7 +155,18 @@ async def pending_value(message: Message, db: DB):
         return
     uid, field = _pending[message.from_user.id]
     value = message.text.strip()
-    if field in {"balance", "total_shifts", "total_earned"}:
+    if field.startswith("warns:"):
+        try:
+            chat_id = int(field.split(":", 1)[1])
+            number = int(value)
+            if not 0 <= number <= 1000: raise ValueError
+        except ValueError:
+            await message.reply("Нужно целое число от 0 до 1000. Попробуй ещё раз.")
+            return
+        async with db.lock:
+            await db.conn.execute("INSERT INTO warns(chat_id,user_id,count) VALUES(?,?,?) ON CONFLICT(chat_id,user_id) DO UPDATE SET count=excluded.count", (chat_id, uid, number))
+            await db.conn.commit()
+    elif field in {"balance", "total_shifts", "total_earned"}:
         if not value.isdigit():
             await message.reply("Нужно целое неотрицательное число. Попробуй ещё раз.")
             return
