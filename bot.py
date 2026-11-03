@@ -66,6 +66,7 @@ PUBLIC_COMMANDS = [
     BotCommand(command="title", description="Титулы и привилегии"),
     BotCommand(command="quit", description="Уволиться с работы"),
     BotCommand(command="staff", description="Список стаффа"),
+    BotCommand(command="role", description="Посмотреть свою или чужую роль"),
     BotCommand(command="warns", description="Количество предупреждений"),
     BotCommand(command="zov_on", description="Включить упоминания"),
     BotCommand(command="zov_off", description="Отключить упоминания"),
