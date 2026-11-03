@@ -28,9 +28,9 @@ OWNER_IDS: set[int] = {
 }
 
 # Grid API — ключ задаётся только в переменных окружения хостинга.
-GRID_API_URL: str = os.getenv("GRID_API_URL", "https://keys.gridapi.ru/v1").strip()
+GRID_API_URL: str = os.getenv("GRID_API_URL", "https://app.gridapi.ru/v1").strip()
 GRID_API_KEY: str = os.getenv("GRID_API_KEY", "").strip()
-GRID_MODEL: str = os.getenv("GRID_MODEL", "gpt-6.1").strip()
+GRID_MODEL: str = os.getenv("GRID_MODEL", "gpt-5").strip()
 
 # База по умолчанию лежит рядом с файлами проекта, а не зависит от
 # текущей рабочей папки процесса. На хостинге укажи DB_PATH на постоянный диск.
