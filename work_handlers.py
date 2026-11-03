@@ -189,10 +189,13 @@ async def cmd_profile(message: Message, args: list[str], db: DB) -> None:
 
     await db.ensure_user(uid)
     row = await db.get_user(uid)
+    if row["custom_nick"]:
+        name = row["custom_nick"]
     job = JOBS_BY_ID.get(row["job_id"]) if row["job_id"] else None
     total = row["total_shifts"]
     lines = [
         f"👤 <b>{escape(name)}</b>",
+        f"🏷 Роль: <b>{escape(row['role'])}</b>" if row["role"] else "",
         f"💰 Баланс: <b>{fmt_money(row['balance'])}</b>",
         f"📈 Заработано за всё время: {fmt_money(row['total_earned'])}",
     ]
