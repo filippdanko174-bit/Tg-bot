@@ -121,6 +121,26 @@ async def owner_panel_home(cb: CallbackQuery):
     if cb.message:
         await cb.message.edit_text(PANEL_TEXT, reply_markup=panel_keyboard())
 
+def _issue_abuse_token(owner_id: int, amount: int) -> str:
+    now = time.monotonic()
+    for token, (_, _, expires) in list(_pending_abuse.items()):
+        if expires <= now:
+            _pending_abuse.pop(token, None)
+    token = secrets.token_hex(4)
+    _pending_abuse[token] = (owner_id, amount, now + 300)
+    return token
+
+
+def _consume_abuse_token(token: str, owner_id: int) -> int | None:
+    pending = _pending_abuse.pop(token, None)
+    if pending is None:
+        return None
+    expected_owner, amount, expires = pending
+    if expected_owner != owner_id or expires <= time.monotonic():
+        return None
+    return amount
+
+
 @router.callback_query(F.data == "owner_abuse")
 async def owner_abuse_menu(cb: CallbackQuery):
     if not callback_is_owner_private(cb):
@@ -129,7 +149,7 @@ async def owner_abuse_menu(cb: CallbackQuery):
     kb = InlineKeyboardBuilder()
     for amount in (100, 500, 1000, 5000, 10000):
         kb.button(text=f"🪙 Раздать всем по {amount:,}".replace(",", " "), callback_data=f"owner_abuse_prepare:{amount}")
-    kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self:10000")
+    kb.button(text="🎁 Бонус себе +10 000", callback_data="owner_abuse_self")
     kb.button(text="🏠 Панель", callback_data="owner_panel_home")
     kb.adjust(1)
     await cb.answer()
@@ -150,14 +170,15 @@ async def owner_abuse_prepare(cb: CallbackQuery):
         return
     try:
         amount = int(cb.data.split(":", 1)[1])
-    except (ValueError, IndexError):
+    except (ValueError, AttributeError, IndexError):
         await cb.answer("Некорректная сумма", show_alert=True)
         return
     if amount not in (100, 500, 1000, 5000, 10000):
         await cb.answer("Недопустимая сумма", show_alert=True)
         return
+    token = _issue_abuse_token(cb.from_user.id, amount)
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Подтвердить раздачу", callback_data=f"owner_abuse_confirm:{amount}")
+    kb.button(text="✅ Подтвердить раздачу", callback_data=f"owner_abuse_confirm:{token}")
     kb.button(text="⬅️ Назад", callback_data="owner_abuse")
     kb.adjust(1)
     await cb.answer()
@@ -165,7 +186,7 @@ async def owner_abuse_prepare(cb: CallbackQuery):
         await cb.message.edit_text(
             f"⚠️ <b>Подтверждение раздачи</b>\n\n"
             f"Каждому пользователю из базы будет начислено <b>{amount:,}</b> монет.\n"
-            "Операция необратима. Продолжить?".replace(",", " "),
+            "Подтверждение действует 5 минут и сработает только один раз. Продолжить?".replace(",", " "),
             reply_markup=kb.as_markup()
         )
 
@@ -175,25 +196,13 @@ async def owner_abuse_confirm(cb: CallbackQuery, db: DB):
     if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True)
         return
-    try:
-        amount = int(cb.data.split(":", 1)[1])
-    except (ValueError, IndexError):
-        await cb.answer("Некорректная сумма", show_alert=True)
-        return
+    token = cb.data.split(":", 1)[1]
+    amount = _consume_abuse_token(token, cb.from_user.id)
     if amount not in (100, 500, 1000, 5000, 10000):
-        await cb.answer("Недопустимая сумма", show_alert=True)
+        await cb.answer("Подтверждение недействительно или уже использовано.", show_alert=True)
         return
+    count, credited = await db.grant_all(amount)
     async with db.lock:
-        async with db.conn.execute("SELECT COUNT(*) AS n FROM users") as cur:
-            count = (await cur.fetchone())["n"]
-        async with db.conn.execute(
-            "SELECT COALESCE(SUM(MIN(?, MAX(0, 1000000000000000-balance))), 0) AS total FROM users",
-            (amount,)
-        ) as cur:
-            credited = (await cur.fetchone())["total"]
-        await db.conn.execute(
-            "UPDATE users SET balance=MIN(balance+?, 1000000000000000)", (amount,)
-        )
         await db.conn.execute(
             "INSERT INTO admin_audit(chat_id,actor_id,action,target_id,details) VALUES(0,?,'give_all',NULL,?)",
             (cb.from_user.id, f"Раздача по {amount} монет; пользователей: {count}; начислено: {credited}")
@@ -213,12 +222,35 @@ async def owner_abuse_confirm(cb: CallbackQuery, db: DB):
         )
 
 
-@router.callback_query(F.data.startswith("owner_abuse_self:"))
-async def owner_abuse_self(cb: CallbackQuery, db: DB):
+@router.callback_query(F.data == "owner_abuse_self")
+async def owner_abuse_self(cb: CallbackQuery):
     if not callback_is_owner_private(cb):
         await cb.answer("Нет доступа", show_alert=True)
         return
-    amount = 10000
+    token = _issue_abuse_token(cb.from_user.id, 10000)
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Подтвердить бонус", callback_data=f"owner_abuse_self_confirm:{token}")
+    kb.button(text="⬅️ Назад", callback_data="owner_abuse")
+    kb.adjust(1)
+    await cb.answer()
+    if cb.message:
+        await cb.message.edit_text(
+            "🎁 <b>Бонус владельцу</b>\n\n"
+            "Тебе будет начислено 10 000 монет. Подтверждение действует 5 минут и сработает один раз.",
+            reply_markup=kb.as_markup()
+        )
+
+
+@router.callback_query(F.data.startswith("owner_abuse_self_confirm:"))
+async def owner_abuse_self_confirm(cb: CallbackQuery, db: DB):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    token = cb.data.split(":", 1)[1]
+    amount = _consume_abuse_token(token, cb.from_user.id)
+    if amount != 10000:
+        await cb.answer("Подтверждение недействительно или уже использовано.", show_alert=True)
+        return
     new_balance, applied = await db.change_balance(cb.from_user.id, amount)
     async with db.lock:
         await db.conn.execute(
@@ -228,7 +260,10 @@ async def owner_abuse_self(cb: CallbackQuery, db: DB):
         await db.conn.commit()
     await cb.answer("Бонус начислен")
     if cb.message:
-        await cb.message.answer(f"👑 Тебе начислено <b>{applied:,}</b> монет. Баланс: <b>{new_balance:,}</b>.".replace(",", " "))
+        await cb.message.edit_text(
+            f"👑 Тебе начислено <b>{applied:,}</b> монет.\nБаланс: <b>{new_balance:,}</b>.".replace(",", " "),
+            reply_markup=panel_keyboard()
+        )
 
 
 @router.callback_query(F.data.startswith("owner_groups:"))
@@ -319,7 +354,7 @@ async def owner_users(cb: CallbackQuery, db: DB):
     kb_buttons = kb.as_markup().inline_keyboard + nav.as_markup().inline_keyboard
     await cb.answer()
     if cb.message:
-        await cb.message.edit_text("\\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_buttons))
+        await cb.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_buttons))
 
 
 @router.callback_query(F.data.startswith("owner_user_view:"))
