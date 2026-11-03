@@ -42,7 +42,7 @@ HELP = """<b>🤖 Команды бота</b>
 /стафф — список стаффа\n/id — твой ID и ID чата
 /help — показать эту справку
 
-Команды также доступны на английском: /work /jobs /profile /balance /pay /top /shop /inventory /title."""
+Команды также доступны на английском: /work /jobs /profile /balance /pay /top /shop /inventory /title /role /zavoz /vibe /rofl."""
 
 @router.message(Cmd("start", "help", "помощь", "хелп", "команды"))
 async def cmd_help(message: Message) -> None:
