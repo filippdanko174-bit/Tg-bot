@@ -142,3 +142,28 @@ async def equip_title(cb: CallbackQuery, db: DB):
     await cb.answer("Титул надет!" if key != "none" else "Титул снят!", show_alert=True)
     if cb.message:
         await send_inventory(cb.message, owner, db)
+
+
+@router.message(Cmd("титул", "title"))
+async def title_info(message: Message, db: DB):
+    if not message.from_user:
+        return
+    await db.ensure_user(message.from_user.id)
+    row = await db.get_user(message.from_user.id)
+    active = row["active_title"] or ""
+    perks = {
+        "bronze": ("🥉 Бронзовый значок", 2),
+        "silver": ("🥈 Серебряный значок", 5),
+        "gold": ("🥇 Золотой значок", 8),
+        "star": ("⭐ Звёздный титул", 12),
+        "crown": ("👑 Королевский титул", 15),
+    }
+    lines = ["🏷 <b>ТИТУЛЫ И ПРИВИЛЕГИИ</b>", ""]
+    for key, (name, bonus) in perks.items():
+        mark = " ← твой активный титул" if key == active else ""
+        lines.append(f"{name}: +{bonus}% к зарплате за смену{mark}")
+    if not active:
+        lines += ["", "Сейчас титул не надет. Купи его в /магазин, затем выбери в /инвентарь."]
+    else:
+        lines += ["", "Сменить или снять титул можно в /инвентарь."]
+    await message.answer("\\n".join(lines))
