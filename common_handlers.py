@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from aiogram import Router
 from aiogram.types import Message
+
+from db import DB
 from html import escape
 
 from utils import Cmd
@@ -63,7 +65,7 @@ async def cmd_staff(message: Message, db: DB) -> None:
             f"• <a href=\"tg://user?id={row['user_id']}\">{escape(name)}</a> — "
             f"<b>{escape(role)}</b> <i>({priority}/100)</i>"
         )
-    await message.reply("\\n".join(lines))
+    await message.reply("\n".join(lines))
 
 
 @router.message(Cmd("id", "айди"))
