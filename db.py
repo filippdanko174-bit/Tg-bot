@@ -94,6 +94,44 @@ class DB:
         ) as cur:
             return await cur.fetchone()
 
+    async def save_chat(self, chat_id: int, title: str, chat_type: str, username: str | None = None) -> None:
+        """Сохраняет групповой чат, в котором бот присутствует."""
+        async with self.lock:
+            await self.conn.execute(
+                "INSERT INTO known_chats(chat_id,title,chat_type,username,last_seen) "
+                "VALUES(?,?,?,?,strftime('%s','now')) "
+                "ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title, "
+                "chat_type=excluded.chat_type, username=excluded.username, "
+                "last_seen=excluded.last_seen",
+                (chat_id, title[:255], chat_type, username or ""),
+            )
+            await self.conn.commit()
+
+    async def forget_chat(self, chat_id: int) -> None:
+        """Удаляет группу из каталога, когда бот покидает её."""
+        async with self.lock:
+            await self.conn.execute("DELETE FROM known_chats WHERE chat_id=?", (chat_id,))
+            await self.conn.commit()
+
+    async def grant_all(self, amount: int) -> tuple[int, int]:
+        """Начисляет фиксированную сумму всем пользователям, не превышая MAX_BALANCE."""
+        if not 1 <= amount <= 10000:
+            raise ValueError("amount must be between 1 and 10000")
+        async with self.lock:
+            async with self.conn.execute("SELECT COUNT(*) AS n FROM users") as cur:
+                count = (await cur.fetchone())["n"]
+            async with self.conn.execute(
+                "SELECT COALESCE(SUM(MIN(?, MAX(0, ? - balance))), 0) AS total FROM users",
+                (amount, MAX_BALANCE),
+            ) as cur:
+                credited = (await cur.fetchone())["total"]
+            await self.conn.execute(
+                "UPDATE users SET balance=MIN(balance+?, ?)",
+                (amount, MAX_BALANCE),
+            )
+            await self.conn.commit()
+        return int(count), int(credited)
+
     # ---------- монеты ----------
 
     async def change_balance(self, user_id: int, delta: int) -> tuple[int, int]:
@@ -110,8 +148,17 @@ class DB:
             return new, new - old
 
     async def transfer(self, from_id: int, to_id: int, amount: int) -> bool:
+        if amount <= 0 or amount > MAX_BALANCE or from_id == to_id:
+            return False
         async with self.lock:
             await self.conn.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (to_id,))
+            async with self.conn.execute(
+                "SELECT balance FROM users WHERE user_id=?", (to_id,)
+            ) as cur:
+                recipient = await cur.fetchone()
+            if recipient is None or recipient["balance"] > MAX_BALANCE - amount:
+                await self.conn.rollback()
+                return False
             cur = await self.conn.execute(
                 "UPDATE users SET balance=balance-? WHERE user_id=? AND balance>=?",
                 (amount, from_id, amount),
@@ -120,8 +167,8 @@ class DB:
                 await self.conn.rollback()
                 return False
             await self.conn.execute(
-                "UPDATE users SET balance=MIN(balance+?, ?) WHERE user_id=?",
-                (amount, MAX_BALANCE, to_id),
+                "UPDATE users SET balance=balance+? WHERE user_id=?",
+                (amount, to_id),
             )
             await self.conn.commit()
             return True
