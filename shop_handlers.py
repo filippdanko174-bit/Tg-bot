@@ -28,7 +28,7 @@ async def open_shop(message: Message, db: DB):
         return
     await db.ensure_user(message.from_user.id)
     row = await db.get_user(message.from_user.id)
-    lines = ["🛍 <b>МАГАЗИН МОНЕТОК</b>", f"Баланс: <b>{fmt_money(row['balance'])} 🪙</b>", ""]
+    lines = ["🛍 <b>МАГАЗИН МОНЕТОК</b>", f"Баланс: <b>{fmt_money(row['balance'])}</b>", ""]
     for name, price in ITEMS.values():
         lines.append(f"{name} — <b>{price} 🪙</b>")
     lines += ["", "Покупки сохраняются в коллекции навсегда. Монеты списываются только за выбранный предмет."]
