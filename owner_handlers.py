@@ -37,7 +37,7 @@ def user_keyboard(uid: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for field, (label, _) in FIELDS.items():
         kb.button(text=f"✏️ {label}", callback_data=f"u_edit:{uid}:{field}")
-    kb.button(text="⚠️ Варны в этом чате", callback_data=f"u_warn:{uid}")
+    kb.button(text="⚠️ Как проверить варны", callback_data="u_warn_help")
     kb.button(text="♻️ Сбросить профиль", callback_data=f"u_reset:{uid}")
     kb.adjust(2, 2, 2, 1, 1)
     return kb.as_markup()
@@ -62,36 +62,172 @@ async def render_user(db: DB, uid: int) -> str:
 
 @router.message(Cmd("панель", "adminpanel"))
 async def admin_panel(message: Message):
-    if not owner_private(message):
+    if not owner_ok(message.from_user):
+        await message.reply("⛔ Панель доступна только владельцу бота.")
         return
     kb = InlineKeyboardBuilder()
-    kb.button(text="👤 Редактировать пользователя", callback_data="owner_user_help")
-    kb.button(text="👋 Настроить приветствие", callback_data="owner_welcome_help")
-    kb.adjust(1)
+    kb.button(text="📊 Статистика", callback_data="owner_stats")
+    kb.button(text="🏷 Роли", callback_data="owner_roles")
+    kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
+    kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
+    kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
+    kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
+    kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
+    kb.adjust(2, 2, 2, 1)
     await message.answer(
-        "👑 <b>Панель владельца</b>\n\n"
-        "Открой редактор пользователя командой <code>/юзер ID</code> "
-        "или ответом на его сообщение: <code>/юзер</code>.\n"
-        "Приветствие: <code>/приветствие текст</code> или <code>/приветствие выкл</code>.\n"
-        "Все действия доступны только OWNER_ID.",
+        "👑 <b>ПАНЕЛЬ УПРАВЛЕНИЯ BYFILIPP</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Выбери раздел ниже. Кнопки доступны только владельцу.\n\n"
+        "👤 Редактор профилей и подробные данные открываются в личке с ботом.\n"
+        "⚙️ Команды ролей, приветствия и экономики владельца можно использовать и в группах.",
         reply_markup=kb.as_markup()
     )
 
-@router.callback_query(F.data == "owner_user_help")
-async def owner_user_help(cb: CallbackQuery):
-    if not callback_is_owner_private(cb):
-        await cb.answer("Нет доступа", show_alert=True); return
+
+def callback_is_owner(cb: CallbackQuery) -> bool:
+    return owner_ok(cb.from_user) and cb.message is not None
+
+
+@router.callback_query(F.data == "owner_panel_refresh")
+async def owner_panel_refresh(cb: CallbackQuery):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer("Панель обновлена")
+    if cb.message:
+        kb = InlineKeyboardBuilder()
+        kb.button(text="📊 Статистика", callback_data="owner_stats")
+        kb.button(text="🏷 Роли", callback_data="owner_roles")
+        kb.button(text="👤 Редактор пользователя", callback_data="owner_user_help")
+        kb.button(text="👋 Приветствие", callback_data="owner_welcome_help")
+        kb.button(text="🛡 Модерация", callback_data="owner_moderation_help")
+        kb.button(text="🎉 Развлечения", callback_data="owner_fun_help")
+        kb.button(text="🔄 Обновить панель", callback_data="owner_panel_refresh")
+        kb.adjust(2, 2, 2, 1)
+        await cb.message.edit_reply_markup(reply_markup=kb.as_markup())
+
+
+@router.callback_query(F.data == "owner_stats")
+async def owner_stats(cb: CallbackQuery, db: DB):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    async with db.conn.execute(
+        "SELECT COUNT(*) AS users, COALESCE(SUM(balance),0) AS coins FROM users"
+    ) as cur:
+        totals = await cur.fetchone()
+    async with db.conn.execute("SELECT COUNT(*) AS amount FROM custom_roles") as cur:
+        roles = (await cur.fetchone())["amount"]
+    async with db.conn.execute("SELECT COALESCE(SUM(count),0) AS amount FROM warns") as cur:
+        warns = (await cur.fetchone())["amount"]
+    async with db.conn.execute(
+        "SELECT COUNT(*) AS amount FROM chat_settings WHERE welcome_text!=''"
+    ) as cur:
+        welcomes = (await cur.fetchone())["amount"]
     await cb.answer()
     if cb.message:
-        await cb.message.answer("Используй /юзер ID или ответь /юзер на сообщение участника.")
+        await cb.message.answer(
+            "📊 <b>СТАТИСТИКА БОТА</b>\n"
+            f"👥 Пользователей в базе: <b>{totals['users']}</b>\n"
+            f"🪙 Монет на балансах: <b>{fmt_money(totals['coins'])}</b>\n"
+            f"🏷 Создано ролей: <b>{roles}</b>\n"
+            f"⚠️ Активных предупреждений: <b>{warns}</b>\n"
+            f"👋 Настроено приветствий: <b>{welcomes}</b>"
+        )
+
+
+@router.callback_query(F.data == "owner_roles")
+async def owner_roles(cb: CallbackQuery, db: DB):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    async with db.conn.execute(
+        "SELECT name,priority FROM custom_roles ORDER BY priority DESC,name COLLATE NOCASE LIMIT 50"
+    ) as cur:
+        rows = await cur.fetchall()
+    await cb.answer()
+    if not cb.message:
+        return
+    if not rows:
+        await cb.message.answer("🏷 Ролей пока нет. Создай: <code>/создатьроль Название 50</code>")
+        return
+    lines = ["🏷 <b>РОЛИ БОТА</b>"]
+    lines.extend(f"• <b>{escape(row['name'])}</b> — приоритет {row['priority']}/100" for row in rows)
+    lines.append("\nСоздать: <code>/создатьроль Название 50</code>\nНазначить: <code>/назначитьроль @ник Название</code>")
+    await cb.message.answer("\n".join(lines))
+
+
+@router.callback_query(F.data == "owner_user_help")
+async def owner_user_help(cb: CallbackQuery):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer()
+    if cb.message:
+        if cb.message.chat.type == "private":
+            await cb.message.answer("Используй <code>/юзер ID</code> или ответь командой <code>/юзер</code> на сообщение участника.")
+        else:
+            await cb.message.answer("🔒 Редактор содержит личные игровые данные, поэтому открой ЛС бота и выполни <code>/юзер ID</code>.")
+
 
 @router.callback_query(F.data == "owner_welcome_help")
 async def owner_welcome_help(cb: CallbackQuery):
-    if not callback_is_owner_private(cb):
-        await cb.answer("Нет доступа", show_alert=True); return
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
     await cb.answer()
     if cb.message:
-        await cb.message.answer("Укажи ID группы: /welcome -1001234567890 Привет, {name}!\nОтключить: /welcome -1001234567890 off")
+        if cb.message.chat.type in {"group", "supergroup"}:
+            text = (
+                "👋 <b>Приветствие этого чата</b>\n"
+                "Установить: <code>/приветствие Привет, {name}!</code>\n"
+                "Отключить: <code>/приветствие выкл</code>"
+            )
+        else:
+            text = (
+                "👋 <b>Настройка приветствия</b>\n"
+                "В группе от имени владельца: <code>/приветствие Привет, {name}!</code>\n"
+                "Из ЛС по ID: <code>/приветствие -1001234567890 Привет, {name}!</code>\n"
+                "Отключить: <code>/приветствие -1001234567890 выкл</code>"
+            )
+        await cb.message.answer(text)
+
+
+@router.callback_query(F.data == "owner_moderation_help")
+async def owner_moderation_help(cb: CallbackQuery):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer()
+    if cb.message:
+        await cb.message.answer(
+            "🛡 <b>МОДЕРАЦИЯ</b>\n"
+            "<code>/бан @ник [время] [причина]</code>\n"
+            "<code>/разбан @ник</code> · <code>/кик @ник</code>\n"
+            "<code>/мут @ник 10м причина</code> · <code>/размут @ник</code>\n"
+            "<code>/варн @ник причина</code> · <code>/варны @ник</code>\n"
+            "<code>/удалить</code> — ответом на сообщение\n"
+            "<code>/чистка</code> — ответом на первое сообщение\n"
+            "<code>/закрепить</code> · <code>/открепить</code>\n\n"
+            "Команды модерации требуют прав администратора чата и соответствующих прав у бота."
+        )
+
+
+@router.callback_query(F.data == "owner_fun_help")
+async def owner_fun_help(cb: CallbackQuery):
+    if not callback_is_owner(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer()
+    if cb.message:
+        await cb.message.answer(
+            "🎉 <b>РАЗВЛЕЧЕНИЯ</b>\n"
+            "/завоз — персональное сообщение с мемом\n"
+            "/вайб — случайная оценка вайба\n"
+            "/рофл — авторская шутка\n"
+            "/зов_вкл и /зов_выкл — настройка добровольных упоминаний\n"
+            "/зов — список тех, кто сам подписался"
+        )
 
 @router.message(Cmd("юзер", "useredit"))
 async def edit_user(message: Message, args: list[str], db: DB):
@@ -121,32 +257,72 @@ async def edit_field(cb: CallbackQuery):
             f"Формат: {FIELDS[field][1]}"
         )
 
-@router.callback_query(F.data.startswith("u_warn:"))
-async def show_warns(cb: CallbackQuery, db: DB):
+@router.callback_query(F.data == "u_warn_help")
+async def show_warns_help(cb: CallbackQuery):
     if not callback_is_owner_private(cb):
-        await cb.answer("Нет доступа", show_alert=True); return
-    uid = int(cb.data.split(":")[1])
-    chat_id = cb.message.chat.id if cb.message else 0
-    count = await db.get_warns(chat_id, uid) if chat_id else 0
-    _pending[cb.from_user.id] = (uid, f"warns:{chat_id}")
-    await cb.answer(f"Сейчас варнов: {count}", show_alert=True)
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer()
     if cb.message:
-        await cb.message.answer(f"Отправь новое число варнов для пользователя {uid} в этом чате (0–1000).")
+        await cb.message.answer(
+            "⚠️ Предупреждения считаются отдельно в каждом чате. "
+            "Чтобы посмотреть их, открой нужную группу и напиши <code>/варны @ник</code>."
+        )
 
 @router.callback_query(F.data.startswith("u_reset:"))
+async def confirm_reset_user(cb: CallbackQuery):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        uid = int(cb.data.split(":")[1])
+    except (ValueError, IndexError):
+        await cb.answer("Некорректный пользователь", show_alert=True)
+        return
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Да, сбросить", callback_data=f"u_reset_yes:{uid}")
+    kb.button(text="↩️ Отмена", callback_data=f"u_reset_no:{uid}")
+    kb.adjust(2)
+    await cb.answer()
+    if cb.message:
+        await cb.message.answer(
+            f"⚠️ <b>Подтверди сброс профиля {uid}</b>\n"
+            "Баланс, работа, смены, ник и роль будут очищены. Это действие нельзя отменить.",
+            reply_markup=kb.as_markup()
+        )
+
+
+@router.callback_query(F.data.startswith("u_reset_yes:"))
 async def reset_user(cb: CallbackQuery, db: DB):
     if not callback_is_owner_private(cb):
-        await cb.answer("Нет доступа", show_alert=True); return
-    uid = int(cb.data.split(":")[1])
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        uid = int(cb.data.split(":")[1])
+    except (ValueError, IndexError):
+        await cb.answer("Некорректный пользователь", show_alert=True)
+        return
     async with db.lock:
         await db.conn.execute(
-            "UPDATE users SET balance=0,job_id=NULL,total_shifts=0,total_earned=0,last_work=0,custom_nick='',role='' WHERE user_id=?",
-            (uid,))
+            "UPDATE users SET balance=0,job_id=NULL,total_shifts=0,total_earned=0,last_work=0,custom_nick='',role='',active_title='' WHERE user_id=?",
+            (uid,)
+        )
         await db.conn.execute("DELETE FROM job_stats WHERE user_id=?", (uid,))
+        await db.conn.execute("DELETE FROM shop_inventory WHERE user_id=?", (uid,))
         await db.conn.commit()
     await cb.answer("Профиль сброшен", show_alert=True)
     if cb.message:
         await cb.message.answer(await render_user(db, uid), reply_markup=user_keyboard(uid))
+
+
+@router.callback_query(F.data.startswith("u_reset_no:"))
+async def cancel_reset_user(cb: CallbackQuery):
+    if not callback_is_owner_private(cb):
+        await cb.answer("Нет доступа", show_alert=True)
+        return
+    await cb.answer("Сброс отменён")
+    if cb.message:
+        await cb.message.answer("✅ Сброс профиля отменён.")
 
 @router.message(lambda message: message.from_user is not None and message.from_user.id in _pending and bool(message.text))
 async def pending_value(message: Message, db: DB):
@@ -154,6 +330,13 @@ async def pending_value(message: Message, db: DB):
         return
     uid, field = _pending[message.from_user.id]
     value = message.text.strip()
+    if value.lower() in {"/отмена", "/cancel", "!отмена"}:
+        _pending.pop(message.from_user.id, None)
+        await message.reply("✅ Редактирование отменено.")
+        return
+    if value.startswith("/") or value.startswith("!"):
+        await message.reply("Сейчас ожидается значение поля. Чтобы выйти, отправь /отмена.")
+        return
     if field.startswith("warns:"):
         try:
             chat_id = int(field.split(":", 1)[1])
