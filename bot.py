@@ -10,6 +10,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
+    BotCommandScopeChat,
     BotCommandScopeDefault,
     ErrorEvent,
     Message,
@@ -82,11 +83,14 @@ ADMIN_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand(command="purge", description="Очистить сообщения"),
     BotCommand(command="pin", description="Закрепить сообщение"),
     BotCommand(command="unpin", description="Открепить сообщение"),
-    BotCommand(command="give", description="Выдать игровые монеты (владелец)"),
-    BotCommand(command="take", description="Забрать игровые монеты (владелец)"),
+]
+
+OWNER_COMMANDS = PUBLIC_COMMANDS + [
+    BotCommand(command="give", description="Выдать игровые монеты"),
+    BotCommand(command="take", description="Забрать игровые монеты"),
     BotCommand(command="adminpanel", description="Панель владельца"),
     BotCommand(command="useredit", description="Редактор пользователя"),
-    BotCommand(command="welcome", description="Настроить приветствие"),
+    BotCommand(command="welcome", description="Настроить приветствие группы"),
 ]
 
 
@@ -114,6 +118,8 @@ async def main() -> None:
     try:
         await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
         await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeAllChatAdministrators())
+        for owner_id in config.OWNER_IDS:
+            await bot.set_my_commands(OWNER_COMMANDS, scope=BotCommandScopeChat(chat_id=owner_id))
     except Exception:
         log.exception("Не удалось выставить меню команд (не критично)")
 
