@@ -57,6 +57,7 @@ PUBLIC_COMMANDS = [
     BotCommand(command="top", description="Самые богатые"),
     BotCommand(command="shop", description="Магазин за монеты"),
     BotCommand(command="inventory", description="Моя коллекция"),
+    BotCommand(command="title", description="Титул и привилегии"),
     BotCommand(command="quit", description="Уволиться"),
     BotCommand(command="warns", description="Сколько варнов"),
     BotCommand(command="help", description="Все команды"),
