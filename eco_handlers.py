@@ -134,9 +134,6 @@ async def owner_target(message: Message, args: list[str], db: DB) -> tuple[Targe
 
 @router.message(Cmd("выдать", "give", "начислить"))
 async def cmd_give(message: Message, args: list[str], db: DB) -> None:
-    if message.chat.type != "private":
-        await message.reply("⛔ Команды владельца доступны только в личных сообщениях с ботом.")
-        return
     if not is_owner(message):
         await message.reply("⛔ Эта команда только для владельца бота.")
         return
@@ -153,9 +150,6 @@ async def cmd_give(message: Message, args: list[str], db: DB) -> None:
 
 @router.message(Cmd("забрать", "take", "изъять"))
 async def cmd_take(message: Message, args: list[str], db: DB) -> None:
-    if message.chat.type != "private":
-        await message.reply("⛔ Команды владельца доступны только в личных сообщениях с ботом.")
-        return
     if not is_owner(message):
         await message.reply("⛔ Эта команда только для владельца бота.")
         return
