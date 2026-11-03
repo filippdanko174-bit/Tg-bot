@@ -31,6 +31,17 @@ NEED_TARGET = (
 )
 
 
+async def audit_admin(db: DB, message: Message, action: str, target_id: int | None = None, details: str = "") -> None:
+    if message.from_user is None:
+        return
+    async with db.lock:
+        await db.conn.execute(
+            "INSERT INTO admin_audit(chat_id,actor_id,action,target_id,details) VALUES(?,?,?,?,?)",
+            (message.chat.id, message.from_user.id, action, target_id, details[:500]),
+        )
+        await db.conn.commit()
+
+
 # ---------- проверки и общие функции ----------
 
 async def is_chat_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
@@ -174,6 +185,7 @@ async def cmd_ban(message: Message, args: list[str], bot: Bot, db: DB) -> None:
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "ban", t.user_id, reason)
     await message.reply(f"🔨 {mention(t.user_id, t.name)} забанен {dur_text(seconds)}.{reason_text(reason)}")
 
 
@@ -187,6 +199,7 @@ async def cmd_unban(message: Message, args: list[str], bot: Bot, db: DB) -> None
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "unban", t.user_id)
     await message.reply(f"✅ {mention(t.user_id, t.name)} разбанен.")
 
 
@@ -202,6 +215,7 @@ async def cmd_kick(message: Message, args: list[str], bot: Bot, db: DB) -> None:
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "kick", t.user_id, reason)
     await message.reply(f"👢 {mention(t.user_id, t.name)} выгнан из чата.{reason_text(reason)}")
 
 
@@ -220,6 +234,7 @@ async def cmd_mute(message: Message, args: list[str], bot: Bot, db: DB) -> None:
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "mute", t.user_id, reason)
     await message.reply(f"🔇 {mention(t.user_id, t.name)} в муте {dur_text(seconds)}.{reason_text(reason)}")
 
 
@@ -234,6 +249,7 @@ async def cmd_unmute(message: Message, args: list[str], bot: Bot, db: DB) -> Non
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "unmute", t.user_id)
     await message.reply(f"🔊 {mention(t.user_id, t.name)} размучен.")
 
 
@@ -247,6 +263,7 @@ async def cmd_warn(message: Message, args: list[str], bot: Bot, db: DB) -> None:
     reason = " ".join(t.rest)
     chat_id = message.chat.id
     count = await db.add_warn(chat_id, t.user_id)
+    await audit_admin(db, message, "warn", t.user_id, reason)
     who = mention(t.user_id, t.name)
     if count < config.WARN_LIMIT:
         await message.reply(
@@ -300,7 +317,7 @@ async def cmd_warns(message: Message, args: list[str], db: DB) -> None:
 # ---------- удаление сообщений ----------
 
 @router.message(Cmd("удалить", "del", "удал"))
-async def cmd_delete(message: Message, bot: Bot) -> None:
+async def cmd_delete(message: Message, bot: Bot, db: DB) -> None:
     if not await guard(message, bot):
         return
     reply = message.reply_to_message
@@ -309,6 +326,7 @@ async def cmd_delete(message: Message, bot: Bot) -> None:
         return
     try:
         await reply.delete()
+        await audit_admin(db, message, "delete", reply.from_user.id if reply.from_user else None)
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
@@ -319,7 +337,7 @@ async def cmd_delete(message: Message, bot: Bot) -> None:
 
 
 @router.message(Cmd("чистка", "purge", "очистить"))
-async def cmd_purge(message: Message, bot: Bot) -> None:
+async def cmd_purge(message: Message, bot: Bot, db: DB) -> None:
     if not await guard(message, bot):
         return
     reply = message.reply_to_message
@@ -344,13 +362,14 @@ async def cmd_purge(message: Message, bot: Bot) -> None:
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "purge", None, f"Удалено до {end-start+1} сообщений")
     await message.answer(f"🧹 Удалено сообщений: до {end - start + 1}.")
 
 
 # ---------- закреп ----------
 
 @router.message(Cmd("закрепить", "закреп", "pin"))
-async def cmd_pin(message: Message, bot: Bot) -> None:
+async def cmd_pin(message: Message, bot: Bot, db: DB) -> None:
     if not await guard(message, bot):
         return
     reply = message.reply_to_message
@@ -359,6 +378,7 @@ async def cmd_pin(message: Message, bot: Bot) -> None:
         return
     try:
         await bot.pin_chat_message(message.chat.id, reply.message_id, disable_notification=True)
+        await audit_admin(db, message, "pin", reply.from_user.id if reply.from_user else None)
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
@@ -366,7 +386,7 @@ async def cmd_pin(message: Message, bot: Bot) -> None:
 
 
 @router.message(Cmd("открепить", "unpin"))
-async def cmd_unpin(message: Message, bot: Bot) -> None:
+async def cmd_unpin(message: Message, bot: Bot, db: DB) -> None:
     if not await guard(message, bot):
         return
     reply = message.reply_to_message
@@ -378,4 +398,5 @@ async def cmd_unpin(message: Message, bot: Bot) -> None:
     except TelegramAPIError as e:
         await message.reply(fail_text(e))
         return
+    await audit_admin(db, message, "unpin")
     await message.reply("📌 Сообщение откреплено.")
