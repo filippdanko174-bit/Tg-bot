@@ -27,6 +27,7 @@ from owner_handlers import router as owner_router
 from feature_db import init_features
 from shop_handlers import router as shop_router
 from fun_handlers import router as fun_router
+from misc_handlers import router as misc_router
 
 log = logging.getLogger("bot")
 
@@ -40,7 +41,7 @@ class TrackUsers(BaseMiddleware):
             for user in (event.from_user, event.reply_to_message.from_user if event.reply_to_message else None):
                 if user is not None and not user.is_bot:
                     await db.upsert_user(user.id, user.username, user.full_name)
-        except Exception:  # учёт пользователей не должен ломать обработку команды
+        except Exception:
             log.exception("Не удалось сохранить пользователя")
         return await handler(event, data)
 
@@ -50,12 +51,15 @@ async def on_error(event: ErrorEvent) -> bool:
     return True
 
 
-# Telegram показывает команды только латиницей. Русские варианты остаются
-# рабочими в обработчиках, а здесь перечислены все доступные английские алиасы.
+# В Telegram меню команд поддерживает только латинские имена.
 PUBLIC_COMMANDS = [
     BotCommand(command="start", description="Запустить бота"),
     BotCommand(command="help", description="Все команды и помощь"),
     BotCommand(command="id", description="Узнать ID пользователя и чата"),
+    BotCommand(command="ping", description="Проверить связь с Telegram"),
+    BotCommand(command="coin", description="Подбросить монетку"),
+    BotCommand(command="dice", description="Бросить кубик"),
+    BotCommand(command="number", description="Случайное число"),
     BotCommand(command="work", description="Выйти на смену и заработать"),
     BotCommand(command="jobs", description="Список работ"),
     BotCommand(command="profile", description="Мой профиль"),
@@ -118,24 +122,27 @@ async def main() -> None:
     await init_features(db)
 
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    me = await bot.get_me()
-    utils.BOT_USERNAME = me.username or ""
-    log.info("Запущен бот @%s", me.username)
-
-    dp = Dispatcher(db=db)
-    dp.message.outer_middleware(TrackUsers())
-    dp.errors.register(on_error)
-    dp.include_routers(owner_router, mod_router, eco_router, work_router, shop_router, common_router, fun_router)
-
     try:
-        await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
-        await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeAllChatAdministrators())
-        for owner_id in config.OWNER_IDS:
-            await bot.set_my_commands(OWNER_COMMANDS, scope=BotCommandScopeChat(chat_id=owner_id))
-    except Exception:
-        log.exception("Не удалось выставить меню команд (не критично)")
+        me = await bot.get_me()
+        utils.BOT_USERNAME = me.username or ""
+        log.info("Запущен бот @%s", me.username)
 
-    try:
+        dp = Dispatcher(db=db)
+        dp.message.outer_middleware(TrackUsers())
+        dp.errors.register(on_error)
+        dp.include_routers(
+            owner_router, mod_router, eco_router, work_router,
+            shop_router, common_router, fun_router, misc_router,
+        )
+
+        try:
+            await bot.set_my_commands(PUBLIC_COMMANDS, scope=BotCommandScopeDefault())
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeAllChatAdministrators())
+            for owner_id in config.OWNER_IDS:
+                await bot.set_my_commands(OWNER_COMMANDS, scope=BotCommandScopeChat(chat_id=owner_id))
+        except Exception:
+            log.exception("Не удалось выставить меню команд (не критично)")
+
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
