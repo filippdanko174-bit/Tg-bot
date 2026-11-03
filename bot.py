@@ -48,30 +48,45 @@ async def on_error(event: ErrorEvent) -> bool:
     return True
 
 
+# Telegram показывает команды только латиницей. Русские варианты остаются
+# рабочими в обработчиках, а здесь перечислены все доступные английские алиасы.
 PUBLIC_COMMANDS = [
-    BotCommand(command="work", description="Выйти на смену"),
+    BotCommand(command="start", description="Запустить бота"),
+    BotCommand(command="help", description="Все команды и помощь"),
+    BotCommand(command="id", description="Узнать ID пользователя и чата"),
+    BotCommand(command="work", description="Выйти на смену и заработать"),
     BotCommand(command="jobs", description="Список работ"),
     BotCommand(command="profile", description="Мой профиль"),
     BotCommand(command="balance", description="Баланс монет"),
     BotCommand(command="pay", description="Передать монеты"),
-    BotCommand(command="top", description="Самые богатые"),
+    BotCommand(command="top", description="Рейтинг по монетам"),
     BotCommand(command="shop", description="Магазин за монеты"),
-    BotCommand(command="inventory", description="Моя коллекция"),
-    BotCommand(command="title", description="Титул и привилегии"),
-    BotCommand(command="quit", description="Уволиться"),
-    BotCommand(command="warns", description="Сколько варнов"),
-    BotCommand(command="help", description="Все команды"),
+    BotCommand(command="inventory", description="Моя коллекция и титул"),
+    BotCommand(command="title", description="Титулы и привилегии"),
+    BotCommand(command="quit", description="Уволиться с работы"),
+    BotCommand(command="warns", description="Количество предупреждений"),
+    BotCommand(command="zov_on", description="Включить упоминания"),
+    BotCommand(command="zov_off", description="Отключить упоминания"),
+    BotCommand(command="zov", description="Позвать подписавшихся участников"),
 ]
+
 ADMIN_COMMANDS = PUBLIC_COMMANDS + [
-    BotCommand(command="ban", description="Забанить"),
-    BotCommand(command="unban", description="Разбанить"),
-    BotCommand(command="kick", description="Выгнать"),
-    BotCommand(command="mute", description="Замутить"),
-    BotCommand(command="unmute", description="Размутить"),
-    BotCommand(command="warn", description="Выдать варн"),
-    BotCommand(command="unwarn", description="Снять варн"),
+    BotCommand(command="ban", description="Забанить участника"),
+    BotCommand(command="unban", description="Снять бан"),
+    BotCommand(command="kick", description="Выгнать участника"),
+    BotCommand(command="mute", description="Запретить писать"),
+    BotCommand(command="unmute", description="Снять мут"),
+    BotCommand(command="warn", description="Выдать предупреждение"),
+    BotCommand(command="unwarn", description="Снять предупреждение"),
     BotCommand(command="del", description="Удалить сообщение"),
-    BotCommand(command="purge", description="Почистить чат"),
+    BotCommand(command="purge", description="Очистить сообщения"),
+    BotCommand(command="pin", description="Закрепить сообщение"),
+    BotCommand(command="unpin", description="Открепить сообщение"),
+    BotCommand(command="give", description="Выдать игровые монеты (владелец)"),
+    BotCommand(command="take", description="Забрать игровые монеты (владелец)"),
+    BotCommand(command="adminpanel", description="Панель владельца"),
+    BotCommand(command="useredit", description="Редактор пользователя"),
+    BotCommand(command="welcome", description="Настроить приветствие"),
 ]
 
 
