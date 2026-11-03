@@ -101,7 +101,8 @@ ADMIN_COMMANDS = PUBLIC_COMMANDS + [
 OWNER_COMMANDS = PUBLIC_COMMANDS + [
     BotCommand(command="give", description="Выдать игровые монеты"),
     BotCommand(command="take", description="Забрать игровые монеты"),
-    BotCommand(command="setstat", description="Панель владельца"),
+    BotCommand(command="adminpanel", description="Закрытая панель владельца"),
+    BotCommand(command="setstat", description="Изменить профиль пользователя"),
     BotCommand(command="useredit", description="Редактор пользователя"),
     BotCommand(command="welcome", description="Настроить приветствие группы"),
     BotCommand(command="roles", description="Список пользовательских ролей"),
