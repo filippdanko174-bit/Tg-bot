@@ -322,7 +322,8 @@ async def remove_role(message: Message, args: list[str], db: DB):
         await db.conn.execute("UPDATE users SET role='' WHERE user_id=?", (target.user_id,))
         await db.conn.commit()
     await message.answer(f"✅ Роль снята с {mention(target.user_id, target.name)}.")
-\n@router.message(Cmd("приветствие", "welcome"))
+
+@router.message(Cmd("приветствие", "welcome"))
 async def set_welcome(message: Message, args: list[str], db: DB):
     if not owner_private(message):
         if message.chat.type != "private":
