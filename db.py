@@ -52,6 +52,8 @@ class DB:
 
     async def close(self) -> None:
         if self.conn is not None:
+            # Сбрасываем WAL в основной файл перед штатным завершением процесса.
+            await self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             await self.conn.close()
 
     # ---------- пользователи ----------
