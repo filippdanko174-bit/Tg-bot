@@ -6,7 +6,6 @@ from aiogram.types import Message
 
 from db import DB
 from html import escape
-
 from utils import Cmd
 
 router = Router(name="common")
@@ -37,12 +36,18 @@ HELP = """<b>🤖 Команды бота</b>
 /завоз — получить персональный мемный завоз
 /вайб — шуточная проверка вайба
 /рофл — случайная авторская шутка
+/монетка — подбросить монетку
+/кости — бросить кубик
+/число 1 100 — случайное число от 1 до 100
 
-<b>ℹ️ Прочее</b>
-/стафф — список стаффа\n/id — твой ID и ID чата
+<b>🧰 Утилиты</b>
+/пинг — проверить связь с Telegram
+/id — твой ID и ID чата
+/стафф — список стаффа
 /help — показать эту справку
 
-Команды также доступны на английском: /work /jobs /profile /balance /pay /top /shop /inventory /title /role /zavoz /vibe /rofl."""
+Английские варианты: /work /jobs /profile /balance /pay /top /shop /inventory /title /role /ping /coin /dice /number /zavoz /vibe /rofl."""
+
 
 @router.message(Cmd("start", "help", "помощь", "хелп", "команды"))
 async def cmd_help(message: Message) -> None:
@@ -72,7 +77,6 @@ async def cmd_staff(message: Message, db: DB) -> None:
             f"<b>{escape(role)}</b> <i>({priority}/100)</i>"
         )
     await message.reply("\n".join(lines))
-
 
 
 @router.message(Cmd("роль", "role"))
@@ -109,6 +113,7 @@ async def cmd_role(message: Message, args: list[str], db: DB) -> None:
         f"🏷 Роль: <b>{escape(role_name)}</b>\n"
         f"⭐ Приоритет: <b>{priority}/100</b>"
     )
+
 
 @router.message(Cmd("id", "айди"))
 async def cmd_id(message: Message) -> None:
