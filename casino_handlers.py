@@ -44,6 +44,7 @@ async def play(message: Message, db: DB, amount_token: str, game: str, choice: s
         async with db.conn.execute("SELECT balance FROM users WHERE user_id=?", (user.id,)) as cur:
             row = await cur.fetchone()
         if row["balance"] < amount:
+            await db.conn.commit()
             await message.reply(f"Не хватает монет. Баланс: {fmt_money(row['balance'])}"); return
         payout = amount * multiplier
         new_balance = min(10**15, row["balance"] - amount + payout)
